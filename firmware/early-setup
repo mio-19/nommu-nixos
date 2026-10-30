@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+# Match the mounts the upstream BusyBox init performed before rcS.
+mount -t proc proc /proc
+mkdir -p /dev/pts /dev/shm /tmp /run/lock/subsys
+mount -t devpts -o gid=5,mode=620,ptmxmode=0666 devpts /dev/pts
+mount -t tmpfs -o mode=0777 tmpfs /dev/shm
+mount -t tmpfs -o mode=1777 tmpfs /tmp
+mount -t sysfs sysfs /sys
+mount -t jffs2 mtd:etc /etc
+mount -t jffs2 mtd:home /home
+ln -sf /proc/self/fd /dev/fd
+ln -sf /proc/self/fd/0 /dev/stdin
+ln -sf /proc/self/fd/1 /dev/stdout
+ln -sf /proc/self/fd/2 /dev/stderr
+hostname -F /etc/hostname

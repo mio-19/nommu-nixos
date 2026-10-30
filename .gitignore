@@ -1,1 +1,4 @@
 result
+result-*
+.work/
+__pycache__/
