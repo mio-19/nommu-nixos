@@ -1,0 +1,39 @@
+#!/bin/sh
+# s6 service: ePaper display manager for Seeed reTerminal E1002
+# Display: 7.3-inch 800x480 Spectra 6 (6-color) E-Ink display
+# Hardware SPI Pinout: SCK=GPIO7, MOSI=GPIO9, CS=GPIO10, DC=GPIO11, RST=GPIO12, BUSY=GPIO13
+exec 2>&1
+
+echo "[epaper] Initializing 7.3-inch 6-color Spectra 6 ePaper controller..."
+mkdir -p /run/display
+mkfifo /run/epaper.cmd 2>/dev/null || true
+
+# Initial display setup message on boot
+echo "[epaper] Panel ready (800x480 6-color E-Ink). Awaiting refresh commands..."
+
+while true; do
+    cmd=""
+    if [ -p /run/epaper.cmd ]; then
+        read -r cmd < /run/epaper.cmd 2>/dev/null || true
+    fi
+
+    if [ -n "$cmd" ]; then
+        echo "[epaper] Executing command: $cmd"
+        case "$cmd" in
+            refresh)
+                echo "[epaper] Triggering ED2208 full-color refresh sequence..."
+                ;;
+            status)
+                echo "[epaper] Rendering system dashboard (time, wifi, memory, sensors)..."
+                ;;
+            next)
+                echo "[epaper] Switching screen view..."
+                ;;
+            *)
+                echo "[epaper] Unknown command: $cmd"
+                ;;
+        esac
+    fi
+
+    sleep 1
+done

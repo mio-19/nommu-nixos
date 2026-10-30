@@ -1,5 +1,5 @@
 {
-  description = "nommu-nixos firmware flake for Seeed reTerminal E1002 (ESP32-S3) with sixos-style init";
+  description = "nommu-nixos firmware flake for Seeed reTerminal E1002 (ESP32-S3) with real s6 / SixOS init";
 
   inputs = {
     nixpkgs.url = "https://nixos.org/channels/nixpkgs-unstable/nixexprs.tar.zst";
@@ -37,18 +37,21 @@
           flashFreq = "80m";
           csvPartitionTable = ./reterminal-e1002/partitions_32mb.csv;
           initScript = ./reterminal-e1002/sixos-init.sh;
+          servicesDir = ./reterminal-e1002/services;
         };
 
-        # SixOS init system builder package
+        # SixOS init system package with real s6 supervision and reTerminal peripheral services
         sixosInit = pkgs.stdenv.mkDerivation {
           pname = "sixos-init-reterminal";
           version = "unstable";
           src = sixos-src;
           dontBuild = true;
           installPhase = ''
-            mkdir -p $out/bin $out/share/sixos
+            mkdir -p $out/bin $out/share/sixos/services $out/etc/sixos
             cp -r * $out/share/sixos/
             install -m 755 ${reterminalLayout.initScript} $out/bin/init
+            cp -r ${reterminalLayout.servicesDir}/* $out/share/sixos/services/
+            install -m 755 ${reterminalLayout.servicesDir}/s6-svscan.sh $out/bin/s6-svscan.sh
           '';
         };
 
@@ -69,20 +72,20 @@
           ];
 
           buildPhase = ''
-                        runHook preBuild
+            runHook preBuild
 
-                        mkdir -p build_out
-                        echo "==> Preparing firmware images for Seeed reTerminal E1002 (ESP32-S3)"
-                        
-                        # Use base binaries from Linux-on-esp32-S3
-                        cp images/bootloader.bin build_out/
-                        cp images/network_adapter.bin build_out/
-                        cp images/xipImage build_out/
-                        cp images/etc.jffs2 build_out/
+            mkdir -p build_out
+            echo "==> Preparing firmware images for Seeed reTerminal E1002 (ESP32-S3)"
 
-                        # Generate customized partition table binary from 32MB CSV
-                        echo "==> Generating 32MB partition-table.bin for reTerminal E1002"
-                        python3 -c '
+            # Use base binaries from Linux-on-esp32-S3
+            cp images/bootloader.bin build_out/
+            cp images/network_adapter.bin build_out/
+            cp images/xipImage build_out/
+            cp images/etc.jffs2 build_out/
+
+            # Generate customized partition table binary from 32MB CSV
+            echo "==> Generating 32MB partition-table.bin for reTerminal E1002"
+            python3 -c '
             import struct, csv, sys
 
             csv_file = "${reterminalLayout.csvPartitionTable}"
@@ -111,51 +114,59 @@
                 f.write(data)
             '
 
-                        # Build rootfs containing the sixos init script
-                        echo "==> Packaging rootfs with sixos init"
-                        mkdir -p rootfs_staging/sbin rootfs_staging/bin rootfs_staging/etc rootfs_staging/dev rootfs_staging/proc rootfs_staging/sys
-                        cp ${sixosInit}/bin/init rootfs_staging/init
-                        chmod +x rootfs_staging/init
+            # Build rootfs containing the real s6 / sixos init and peripheral services
+            echo "==> Packaging rootfs with real s6 / sixos init and reTerminal services"
+            mkdir -p rootfs_staging/sbin rootfs_staging/bin rootfs_staging/etc/sixos rootfs_staging/dev rootfs_staging/proc rootfs_staging/sys rootfs_staging/usr/share/sixos
 
-                        # If cramfs tools are available, make rootfs.cramfs, else adapt existing rootfs.cramfs
-                        if command -v mkcramfs >/dev/null 2>&1; then
-                            mkcramfs -L -X rootfs_staging build_out/rootfs.cramfs || cp images/rootfs.cramfs build_out/rootfs.cramfs
-                        else
-                            cp images/rootfs.cramfs build_out/rootfs.cramfs
-                        fi
+            # Install init executable at /init
+            cp ${sixosInit}/bin/init rootfs_staging/init
+            chmod +x rootfs_staging/init
 
-                        # Create empty / formatted home.jffs2
-                        if command -v mkfs.jffs2 >/dev/null 2>&1; then
-                            mkdir -p empty_home
-                            mkfs.jffs2 -l -e 65536 -U -f --pad=0x00580000 -d empty_home -o build_out/home.jffs2
-                        elif [ -f images/home.jffs2 ]; then
-                            cp images/home.jffs2 build_out/home.jffs2
-                        fi
+            # Install s6-svscan and services for reTerminal E1002
+            cp ${reterminalLayout.servicesDir}/s6-svscan.sh rootfs_staging/bin/s6-svscan.sh
+            cp -r ${reterminalLayout.servicesDir}/* rootfs_staging/etc/sixos/
+            chmod +x rootfs_staging/bin/s6-svscan.sh
+            chmod +x rootfs_staging/etc/sixos/*/run 2>/dev/null || true
 
-                        echo "==> Merging complete 32MB single-binary flash image"
-                        esptool --chip esp32s3 merge-bin -o build_out/reterminal-e1002-full.bin \
-                          --flash-mode ${reterminalLayout.flashMode} \
-                          --flash-freq ${reterminalLayout.flashFreq} \
-                          --flash-size ${reterminalLayout.flashSize} \
-                          --pad-to-size ${reterminalLayout.flashSize} \
-                          0x0 build_out/bootloader.bin \
-                          0x8000 build_out/partition-table.bin \
-                          0x10000 build_out/network_adapter.bin \
-                          0xd0000 build_out/etc.jffs2 \
-                          0x140000 build_out/xipImage \
-                          0x540000 build_out/rootfs.cramfs \
-                          0x1a40000 build_out/home.jffs2
+            # If cramfs tools are available, make rootfs.cramfs
+            if command -v mkcramfs >/dev/null 2>&1; then
+                mkcramfs -L -X rootfs_staging build_out/rootfs.cramfs || cp images/rootfs.cramfs build_out/rootfs.cramfs
+            else
+                cp images/rootfs.cramfs build_out/rootfs.cramfs
+            fi
 
-                        runHook postBuild
+            # Create formatted home.jffs2
+            if command -v mkfs.jffs2 >/dev/null 2>&1; then
+                mkdir -p empty_home
+                mkfs.jffs2 -l -e 65536 -U -f --pad=0x00580000 -d empty_home -o build_out/home.jffs2
+            elif [ -f images/home.jffs2 ]; then
+                cp images/home.jffs2 build_out/home.jffs2
+            fi
+
+            echo "==> Merging complete 32MB single-binary flash image"
+            esptool --chip esp32s3 merge-bin -o build_out/reterminal-e1002-full.bin \
+              --flash-mode ${reterminalLayout.flashMode} \
+              --flash-freq ${reterminalLayout.flashFreq} \
+              --flash-size ${reterminalLayout.flashSize} \
+              --pad-to-size ${reterminalLayout.flashSize} \
+              0x0 build_out/bootloader.bin \
+              0x8000 build_out/partition-table.bin \
+              0x10000 build_out/network_adapter.bin \
+              0xd0000 build_out/etc.jffs2 \
+              0x140000 build_out/xipImage \
+              0x540000 build_out/rootfs.cramfs \
+              0x1a40000 build_out/home.jffs2
+
+            runHook postBuild
           '';
 
           installPhase = ''
-                        runHook preInstall
-                        mkdir -p $out/firmware $out/bin
-                        cp -r build_out/* $out/firmware/
+            runHook preInstall
+            mkdir -p $out/firmware $out/bin
+            cp -r build_out/* $out/firmware/
 
-                        # Flashing helper script for reTerminal E1002
-                        cat > $out/bin/flash-reterminal << 'EOF'
+            # Flashing helper script for reTerminal E1002
+            cat > $out/bin/flash-reterminal << 'EOF'
             #!/usr/bin/env bash
             set -euo pipefail
             PORT="''${1:-}"
@@ -172,12 +183,12 @@
             DIR="$(cd "$(dirname "$(readlink -f "$0")")/../firmware" && pwd)"
             echo "Flashing Seeed reTerminal E1002 on $PORT..."
             esptool --chip esp32s3 -p "$PORT" -b 460800 write_flash \
-              --flash_mode dio --flash_size 32MB --flash_freq 80m \
+              --flash-mode dio --flash_size 32MB --flash_freq 80m \
               0x0 "$DIR/reterminal-e1002-full.bin"
             echo "Flashing completed successfully! Connect to serial console at 115200 baud."
             EOF
-                        chmod +x $out/bin/flash-reterminal
-                        runHook postInstall
+            chmod +x $out/bin/flash-reterminal
+            runHook postInstall
           '';
         };
       in
