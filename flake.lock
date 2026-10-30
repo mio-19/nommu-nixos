@@ -1,0 +1,92 @@
+{
+  "nodes": {
+    "flake-utils": {
+      "inputs": {
+        "systems": "systems"
+      },
+      "locked": {
+        "lastModified": 1791914995,
+        "narHash": "sha256-Zf/xfQEAasnwnmEfHqW/4hjDE/s44yn2hD4RuVIZRjA=",
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "rev": "b7a79d3fea1e214f6d668d521cecec0c01e26544",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "type": "github"
+      }
+    },
+    "linux-esp32-s3-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792899746,
+        "narHash": "sha256-Inm3B7uMYA2BIRtOp7+dptcma9ZG7xciiLcTYAHdL1Q=",
+        "owner": "paulneja",
+        "repo": "Linux-on-esp32-S3",
+        "rev": "979acc45629e985b757735e8222dbedf3aa5f1e1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "paulneja",
+        "repo": "Linux-on-esp32-S3",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1793225069,
+        "narHash": "sha256-GYpArmwi/iMuX2ov31oCBhAXRMJdNX9kOl2LZHCuR6M=",
+        "rev": "e62746b0b472753ef019baceab6f1e2e52014980",
+        "type": "tarball",
+        "url": "https://releases.nixos.org/nixpkgs/nixpkgs-26.11pre1104102.e62746b0b472/nixexprs.tar.zst"
+      },
+      "original": {
+        "type": "tarball",
+        "url": "https://nixos.org/channels/nixpkgs-unstable/nixexprs.tar.zst"
+      }
+    },
+    "root": {
+      "inputs": {
+        "flake-utils": "flake-utils",
+        "linux-esp32-s3-src": "linux-esp32-s3-src",
+        "nixpkgs": "nixpkgs",
+        "sixos-src": "sixos-src"
+      }
+    },
+    "sixos-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1793226474,
+        "narHash": "sha256-jgibG7a/WarsgeoVTrzIx3UljnQfcQmOW0whqJqbFqI=",
+        "ref": "refs/heads/master",
+        "rev": "26c564b4b4c1957259b065636e71f4ef87da0295",
+        "revCount": 671,
+        "type": "git",
+        "url": "https://codeberg.org/amjoseph/sixos.git"
+      },
+      "original": {
+        "type": "git",
+        "url": "https://codeberg.org/amjoseph/sixos.git"
+      }
+    },
+    "systems": {
+      "locked": {
+        "lastModified": 1681028828,
+        "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
+        "owner": "nix-systems",
+        "repo": "default",
+        "rev": "da67096a3b9bf56a91d16901293e51ba5b49a27e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "repo": "default",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
