@@ -16,8 +16,17 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, linux-esp32-s3-src, sixos-src, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      linux-esp32-s3-src,
+      sixos-src,
+      ...
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = import nixpkgs { inherit system; };
 
@@ -60,118 +69,119 @@
           ];
 
           buildPhase = ''
-            runHook preBuild
+                        runHook preBuild
 
-            mkdir -p build_out
-            echo "==> Preparing firmware images for Seeed reTerminal E1002 (ESP32-S3)"
-            
-            # Use base binaries from Linux-on-esp32-S3
-            cp images/bootloader.bin build_out/
-            cp images/network_adapter.bin build_out/
-            cp images/xipImage build_out/
-            cp images/etc.jffs2 build_out/
+                        mkdir -p build_out
+                        echo "==> Preparing firmware images for Seeed reTerminal E1002 (ESP32-S3)"
+                        
+                        # Use base binaries from Linux-on-esp32-S3
+                        cp images/bootloader.bin build_out/
+                        cp images/network_adapter.bin build_out/
+                        cp images/xipImage build_out/
+                        cp images/etc.jffs2 build_out/
 
-            # Generate customized partition table binary from 32MB CSV
-            echo "==> Generating 32MB partition-table.bin for reTerminal E1002"
-            python3 -c '
-import struct, csv, sys
+                        # Generate customized partition table binary from 32MB CSV
+                        echo "==> Generating 32MB partition-table.bin for reTerminal E1002"
+                        python3 -c '
+            import struct, csv, sys
 
-csv_file = "${reterminalLayout.csvPartitionTable}"
-out_file = "build_out/partition-table.bin"
-data = bytearray(0xC00)
+            csv_file = "${reterminalLayout.csvPartitionTable}"
+            out_file = "build_out/partition-table.bin"
+            data = bytearray(0xC00)
 
-type_map = {"app": 0x00, "data": 0x01}
-subtype_map = {"factory": 0x00, "nvs": 0x02, "phy": 0x01}
+            type_map = {"app": 0x00, "data": 0x01}
+            subtype_map = {"factory": 0x00, "nvs": 0x02, "phy": 0x01}
 
-pos = 0
-for row in csv.reader(open(csv_file)):
-    row = [f.strip() for f in row if f.strip()]
-    if not row or row[0].startswith("#"):
-        continue
-    name, ptype, psubtype, offset, size = row[:5]
-    t = int(ptype, 0) if ptype.startswith("0x") else type_map.get(ptype, 0x01)
-    st = int(psubtype, 0) if psubtype.startswith("0x") else subtype_map.get(psubtype, 0x00)
-    off = int(offset, 0)
-    sz = int(size, 0)
-    
-    entry = struct.pack("<HBBII16sI", 0x50AA, t, st, off, sz, name.encode("ascii")[:16].ljust(16, b"\0"), 0)
-    data[pos:pos+32] = entry
-    pos += 32
+            pos = 0
+            for row in csv.reader(open(csv_file)):
+                row = [f.strip() for f in row if f.strip()]
+                if not row or row[0].startswith("#"):
+                    continue
+                name, ptype, psubtype, offset, size = row[:5]
+                t = int(ptype, 0) if ptype.startswith("0x") else type_map.get(ptype, 0x01)
+                st = int(psubtype, 0) if psubtype.startswith("0x") else subtype_map.get(psubtype, 0x00)
+                off = int(offset, 0)
+                sz = int(size, 0)
+                
+                entry = struct.pack("<HBBII16sI", 0x50AA, t, st, off, sz, name.encode("ascii")[:16].ljust(16, b"\0"), 0)
+                data[pos:pos+32] = entry
+                pos += 32
 
-with open(out_file, "wb") as f:
-    f.write(data)
-'
+            with open(out_file, "wb") as f:
+                f.write(data)
+            '
 
-            # Build rootfs containing the sixos init script
-            echo "==> Packaging rootfs with sixos init"
-            mkdir -p rootfs_staging/sbin rootfs_staging/bin rootfs_staging/etc rootfs_staging/dev rootfs_staging/proc rootfs_staging/sys
-            cp ${sixosInit}/bin/init rootfs_staging/init
-            chmod +x rootfs_staging/init
+                        # Build rootfs containing the sixos init script
+                        echo "==> Packaging rootfs with sixos init"
+                        mkdir -p rootfs_staging/sbin rootfs_staging/bin rootfs_staging/etc rootfs_staging/dev rootfs_staging/proc rootfs_staging/sys
+                        cp ${sixosInit}/bin/init rootfs_staging/init
+                        chmod +x rootfs_staging/init
 
-            # If cramfs tools are available, make rootfs.cramfs, else adapt existing rootfs.cramfs
-            if command -v mkcramfs >/dev/null 2>&1; then
-                mkcramfs -L -X rootfs_staging build_out/rootfs.cramfs || cp images/rootfs.cramfs build_out/rootfs.cramfs
-            else
-                cp images/rootfs.cramfs build_out/rootfs.cramfs
-            fi
+                        # If cramfs tools are available, make rootfs.cramfs, else adapt existing rootfs.cramfs
+                        if command -v mkcramfs >/dev/null 2>&1; then
+                            mkcramfs -L -X rootfs_staging build_out/rootfs.cramfs || cp images/rootfs.cramfs build_out/rootfs.cramfs
+                        else
+                            cp images/rootfs.cramfs build_out/rootfs.cramfs
+                        fi
 
-            # Create empty / formatted home.jffs2
-            if command -v mkfs.jffs2 >/dev/null 2>&1; then
-                mkdir -p empty_home
-                mkfs.jffs2 -l -e 65536 -U -f --pad=0x00580000 -d empty_home -o build_out/home.jffs2
-            elif [ -f images/home.jffs2 ]; then
-                cp images/home.jffs2 build_out/home.jffs2
-            fi
+                        # Create empty / formatted home.jffs2
+                        if command -v mkfs.jffs2 >/dev/null 2>&1; then
+                            mkdir -p empty_home
+                            mkfs.jffs2 -l -e 65536 -U -f --pad=0x00580000 -d empty_home -o build_out/home.jffs2
+                        elif [ -f images/home.jffs2 ]; then
+                            cp images/home.jffs2 build_out/home.jffs2
+                        fi
 
-            echo "==> Merging complete 32MB single-binary flash image"
-            esptool --chip esp32s3 merge-bin -o build_out/reterminal-e1002-full.bin \
-              --flash-mode ${reterminalLayout.flashMode} \
-              --flash-freq ${reterminalLayout.flashFreq} \
-              --flash-size ${reterminalLayout.flashSize} \
-              --pad-to-size ${reterminalLayout.flashSize} \
-              0x0 build_out/bootloader.bin \
-              0x8000 build_out/partition-table.bin \
-              0x10000 build_out/network_adapter.bin \
-              0xd0000 build_out/etc.jffs2 \
-              0x140000 build_out/xipImage \
-              0x540000 build_out/rootfs.cramfs \
-              0x1a40000 build_out/home.jffs2
+                        echo "==> Merging complete 32MB single-binary flash image"
+                        esptool --chip esp32s3 merge-bin -o build_out/reterminal-e1002-full.bin \
+                          --flash-mode ${reterminalLayout.flashMode} \
+                          --flash-freq ${reterminalLayout.flashFreq} \
+                          --flash-size ${reterminalLayout.flashSize} \
+                          --pad-to-size ${reterminalLayout.flashSize} \
+                          0x0 build_out/bootloader.bin \
+                          0x8000 build_out/partition-table.bin \
+                          0x10000 build_out/network_adapter.bin \
+                          0xd0000 build_out/etc.jffs2 \
+                          0x140000 build_out/xipImage \
+                          0x540000 build_out/rootfs.cramfs \
+                          0x1a40000 build_out/home.jffs2
 
-            runHook postBuild
+                        runHook postBuild
           '';
 
           installPhase = ''
-            runHook preInstall
-            mkdir -p $out/firmware $out/bin
-            cp -r build_out/* $out/firmware/
+                        runHook preInstall
+                        mkdir -p $out/firmware $out/bin
+                        cp -r build_out/* $out/firmware/
 
-            # Flashing helper script for reTerminal E1002
-            cat > $out/bin/flash-reterminal << 'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-PORT="''${1:-}"
-if [ -z "$PORT" ]; then
-    for p in /dev/ttyACM0 /dev/ttyACM1 /dev/ttyUSB0 /dev/ttyUSB1; do
-        if [ -e "$p" ]; then PORT="$p"; break; fi
-    done
-fi
-if [ -z "$PORT" ]; then
-    echo "Usage: flash-reterminal <PORT> (e.g. /dev/ttyACM0)" >&2
-    exit 1
-fi
+                        # Flashing helper script for reTerminal E1002
+                        cat > $out/bin/flash-reterminal << 'EOF'
+            #!/usr/bin/env bash
+            set -euo pipefail
+            PORT="''${1:-}"
+            if [ -z "$PORT" ]; then
+                for p in /dev/ttyACM0 /dev/ttyACM1 /dev/ttyUSB0 /dev/ttyUSB1; do
+                    if [ -e "$p" ]; then PORT="$p"; break; fi
+                done
+            fi
+            if [ -z "$PORT" ]; then
+                echo "Usage: flash-reterminal <PORT> (e.g. /dev/ttyACM0)" >&2
+                exit 1
+            fi
 
-DIR="$(cd "$(dirname "$(readlink -f "$0")")/../firmware" && pwd)"
-echo "Flashing Seeed reTerminal E1002 on $PORT..."
-esptool --chip esp32s3 -p "$PORT" -b 460800 write_flash \
-  --flash_mode dio --flash_size 32MB --flash_freq 80m \
-  0x0 "$DIR/reterminal-e1002-full.bin"
-echo "Flashing completed successfully! Connect to serial console at 115200 baud."
-EOF
-            chmod +x $out/bin/flash-reterminal
-            runHook postInstall
+            DIR="$(cd "$(dirname "$(readlink -f "$0")")/../firmware" && pwd)"
+            echo "Flashing Seeed reTerminal E1002 on $PORT..."
+            esptool --chip esp32s3 -p "$PORT" -b 460800 write_flash \
+              --flash_mode dio --flash_size 32MB --flash_freq 80m \
+              0x0 "$DIR/reterminal-e1002-full.bin"
+            echo "Flashing completed successfully! Connect to serial console at 115200 baud."
+            EOF
+                        chmod +x $out/bin/flash-reterminal
+                        runHook postInstall
           '';
         };
-      in {
+      in
+      {
         packages = {
           default = firmware;
           inherit firmware sixosInit;
@@ -192,5 +202,6 @@ EOF
             echo "To flash: ./result/bin/flash-reterminal /dev/ttyACM0"
           '';
         };
-      });
+      }
+    );
 }
