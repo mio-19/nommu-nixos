@@ -26,11 +26,6 @@ let
     # The upstream kernel mounts devtmpfs on /dev at boot
     # (CONFIG_DEVTMPFS_MOUNT); an additional mount in stage one fails EBUSY.
     devtmpfs-mountpoint = null;
-    # Build the firmware image with sixos' own service constructors, not a
-    # full sixos mkSite/mkHost/mkConfiguration site evaluation.
-    host-prev = { };
-    host-final = { };
-    site = { };
   };
 in
 pkgs.runCommand "sixos-esp32s3-init-template"
