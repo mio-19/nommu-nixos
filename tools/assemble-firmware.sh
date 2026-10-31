@@ -41,13 +41,21 @@ runtime_bins=(
   s6-linux-init s6-linux-init-echo s6-linux-init-hpr s6-linux-init-logouthookd
   s6-linux-init-nuke s6-linux-init-shutdown s6-linux-init-shutdownd
   s6-linux-init-telinit s6-linux-init-umountall
-  s6-log s6-rc s6-rc-init s6-rc-update s6-setuidgid s6-softlimit s6-sudo s6-sudod
-  s6-supervise s6-svc s6-svscan s6-svscanctl
+  s6-log s6-rc s6-rc-init s6-rc-update s6-setuidgid s6-softlimit s6-sudo s6-sudoc s6-sudod
+  s6-supervise s6-svc s6-svlisten s6-svlisten1 s6-svscan s6-svscanctl s6-svwait
 )
 for binary in "${runtime_bins[@]}"; do
   install -m 755 "$stack/target/usr/bin/$binary" "$payload/usr/bin/$binary"
 done
-for binary in s6-rc-fdholder-filler s6-rc-oneshot-run; do
+# s6-svscan's default limits reserve ~260 KiB of stack for its service and
+# name tables, which overflows this NOMMU target's 64 KiB stack. Bound them.
+mv "$payload/usr/bin/s6-svscan" "$payload/usr/bin/s6-svscan.real"
+cat > "$payload/usr/bin/s6-svscan" <<'EOF'
+#!/bin/sh
+exec /usr/bin/s6-svscan.real -C 128 -L 64 "$@"
+EOF
+chmod 755 "$payload/usr/bin/s6-svscan"
+for binary in s6-ftrigrd s6-rc-fdholder-filler s6-rc-oneshot-run; do
   install -m 755 "$stack/target/usr/libexec/$binary" "$payload/usr/libexec/$binary"
 done
 install -m 755 "$stack/target/usr/lib/libfork.so.0" "$payload/usr/lib/libfork.so.0"
@@ -57,7 +65,7 @@ install -m 644 "$init/s6-linux-init.cpio" "$payload/boot/"
 install -m 644 "$init/COPYING.sixos" "$payload/usr/share/sixos/"
 install -m 755 "$repo/firmware/early-setup" "$payload/usr/share/sixos/bin/early-setup"
 cat > "$payload/bin/activate" <<EOF
-#!/bin/sh
+#!/bin/bash
 set -eu
 mkdir -p /run
 rm -f /run/current-system

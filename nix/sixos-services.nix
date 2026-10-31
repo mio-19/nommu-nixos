@@ -38,8 +38,13 @@ let
       args: import "${sixos-src}/mkConfiguration/mkOneshot.nix" ({ inherit lib six; } // args);
     mkBundle = args: import "${sixos-src}/mkConfiguration/mkBundle.nix" ({ inherit lib six; } // args);
   };
+  # s6-rc executes a oneshot's up file as an execline script, and the parser
+  # would read shell builtins as commands; run the shell script from execline.
   early = six.mkOneshot {
-    up = builtins.readFile early-setup;
+    up = ''
+      #!/usr/bin/execlineb -P
+      /bin/bash /usr/share/sixos/bin/early-setup
+    '';
     passthru.spath = [ "early-setup" ];
   };
   console = six.mkService {

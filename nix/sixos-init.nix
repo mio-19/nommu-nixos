@@ -20,7 +20,9 @@ let
     buildPackages = pkgs;
     default-timezone = "UTC0";
     initial-path = "/usr/bin:/usr/sbin:/bin:/sbin";
-    devtmpfs-mountpoint = "/dev";
+    # The upstream kernel mounts devtmpfs on /dev at boot
+    # (CONFIG_DEVTMPFS_MOUNT); an additional mount in stage one fails EBUSY.
+    devtmpfs-mountpoint = null;
   };
 in
 pkgs.runCommand "sixos-esp32s3-init-template"
@@ -42,7 +44,7 @@ pkgs.runCommand "sixos-esp32s3-init-template"
     mkdir -p tree $out
     cd tree
     cat > $out/rc.init <<'RCINIT'
-    #!/bin/sh
+    #!/bin/bash
     set -eu
     exec /nix/var/nix/profiles/system/bin/activate
     RCINIT

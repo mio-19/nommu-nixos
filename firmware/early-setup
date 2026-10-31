@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -eu
 # Match the mounts the upstream BusyBox init performed before rcS.
 mount -t proc proc /proc
