@@ -4,6 +4,11 @@ set -euo pipefail
 repo=${NOMMU_REPO:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)}
 work=$(realpath -m "${1:-$repo/.work}")
 mkdir -p "$work"
+# Refuse an existing artifact before bootstrapping or recompiling the SDK stack.
+if [[ -e $work/firmware ]]; then
+  echo "Output already exists: $work/firmware; preserve or rename it before rebuilding" >&2
+  exit 1
+fi
 if [[ ! -x $work/cramfs-tools/bin/cramfsck ]]; then
   nix build "$repo#cramfs-xip" --no-link --print-out-paths > "$work/cramfs-tools-path"
   ln -s "$(cat "$work/cramfs-tools-path")" "$work/cramfs-tools"

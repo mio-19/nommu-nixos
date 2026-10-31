@@ -32,14 +32,20 @@ for service in ('early-setup', 'hwclock-fake', 'hwclock-fake-updater', 'console'
     marker = f'service {service} successfully started'
     if log.count(marker) != 1:
         raise SystemExit(f'Expected exactly one successful start of {service}; see {sys.argv[1]}')
-for marker in ('Kernel panic', 'Oops:', 'unable to exec', 'error:', 'fatal:', 'Allocation of length', 'page allocation failure'):
+for marker in ('Kernel panic', 'Oops:', 'unable to exec', 'error:', 'fatal:', 'Allocation of length', 'page allocation failure',
+               'warning: unable to stop service'):
     if marker in log:
         raise SystemExit(f'Boot failure: {marker}; see {sys.argv[1]}')
 if os.environ.get('SIXOS_TEST_LIFECYCLE') == '1':
     clean = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', log).replace('\r', '')
     if 'SIXOS-REACTIVATE-OK' not in clean.splitlines():
         raise SystemExit('Repeat activation did not complete successfully')
-    for marker in ('uid=0(root)', 'service hwclock-fake-updater successfully stopped',
+    for service in ('console', 'early-setup', 'hwclock-fake', 'hwclock-fake-updater',
+                    's6rc-oneshot-runner'):
+        marker = f'service {service} successfully stopped'
+        if log.count(marker) != 1:
+            raise SystemExit(f'Expected exactly one successful stop of {service}')
+    for marker in ('uid=0(root)', 'passwd: password for root changed by root',
                    'reboot: Restarting system', '[emu] stop: SwReset'):
         if marker not in log:
             raise SystemExit(f'Missing lifecycle marker: {marker}')
