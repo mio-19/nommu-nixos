@@ -7,8 +7,9 @@
 }:
 let
   lib = pkgs.lib;
+  bindir = "/nix/var/nix/profiles/system/bin";
   targetPackage = {
-    outPath = "/usr";
+    outPath = bindir;
   };
   targetPkgs = pkgs // {
     s6 = targetPackage;
@@ -43,7 +44,7 @@ let
   early = six.mkOneshot {
     up = ''
       #!/usr/bin/execlineb -P
-      /bin/bash /usr/share/sixos/bin/early-setup
+      /bin/bash /nix/var/nix/profiles/system/bin/early-setup
     '';
     passthru.spath = [ "early-setup" ];
   };

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Assemble an experimental sixos-stage-one image from a verified Linux SDK build.
+# Assemble an experimental sixos-stage-one image rooted in the Nix store profile.
+# Upstream BusyBox lives at real FHS paths in the rootfs; the sixos/s6 stack is
+# installed beneath /nix/var/nix/profiles/system and the rootfs keeps no blanket
+# /bin /sbin /usr symlinks to that store object.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 work=$(realpath "${1:-$repo/.work}")
@@ -14,8 +17,14 @@ root="$out/root"
 payload="$out/system-payload"
 profile=/nix/var/nix/profiles/system
 test ! -e "$out" || { echo "Output already exists: $out; choose a fresh build work directory" >&2; exit 1; }
-test -x "$stack/target/usr/bin/s6-svscan"
-test -x "$stack/host/usr/bin/s6-rc-compile"
+# The host s6-rc-compiler is built with the host toolchain and shares the same
+# store prefix so its generated db scripts use the target-side store paths.
+test -x "$stack/target$profile/bin/s6-svscan"
+if [[ -x "$stack/host$profile/bin/s6-rc-compile" ]]; then
+  hostCompile="$stack/host$profile/bin/s6-rc-compile"
+else
+  hostCompile="$stack/target$profile/bin/s6-rc-compile"
+fi
 mkdir -p "$out"
 "$cramfsck" -x "$root" "$linux/images/rootfs.cramfs"
 mkdir -p "$payload"
@@ -28,7 +37,7 @@ for program in micropython socat make nano curl mmu-run fork-test \
   fork-test-dynamic process-test jobq programbench atfork-test; do
   rm -f "$payload/usr/bin/$program"
 done
-mkdir -p "$payload/boot" "$payload/usr/share/sixos/bin" "$payload/usr/libexec" "$out/rc-source"
+mkdir -p "$payload/boot" "$payload/usr/share/sixos/bin" "$payload/usr/share/sixos/db" "$payload$profile/bin" "$payload$profile/lib" "$payload$profile/libexec" "$payload$profile/share/sixos" "$out/rc-source"
 runtime_bins=(
   execlineb background case cd define dollarat elgetopt elgetpositionals elglob eltest
   emptyenv envfile exec execline-cd execline-umask exit export export-array fdblock
@@ -45,39 +54,41 @@ runtime_bins=(
   s6-supervise s6-svc s6-svlisten s6-svlisten1 s6-svscan s6-svscanctl s6-svwait
 )
 for binary in "${runtime_bins[@]}"; do
-  install -m 755 "$stack/target/usr/bin/$binary" "$payload/usr/bin/$binary"
+  install -m 755 "$stack/target$profile/bin/$binary" "$payload$profile/bin/$binary"
 done
 # s6-svscan's default limits reserve ~260 KiB of stack for its service and
 # name tables, which overflows this NOMMU target's 64 KiB stack. Bound them.
-mv "$payload/usr/bin/s6-svscan" "$payload/usr/bin/s6-svscan.real"
-cat > "$payload/usr/bin/s6-svscan" <<'EOF'
+mv "$payload$profile/bin/s6-svscan" "$payload$profile/bin/s6-svscan.real"
+cat > "$payload$profile/bin/s6-svscan" <<'EOF'
 #!/bin/sh
-exec /usr/bin/s6-svscan.real -C 128 -L 64 "$@"
+exec $profile/bin/s6-svscan.real -C 128 -L 64 "$@"
 EOF
-chmod 755 "$payload/usr/bin/s6-svscan"
+chmod 755 "$payload$profile/bin/s6-svscan"
 for binary in s6-ftrigrd s6-rc-fdholder-filler s6-rc-oneshot-run; do
-  install -m 755 "$stack/target/usr/libexec/$binary" "$payload/usr/libexec/$binary"
+  install -m 755 "$stack/target$profile/libexec/$binary" "$payload$profile/libexec/$binary"
 done
-install -m 755 "$stack/target/usr/lib/libfork.so.0" "$payload/usr/lib/libfork.so.0"
-rm -f "$payload/sbin/init"
+install -m 755 "$stack/target$profile/lib/libfork.so.0" "$payload$profile/lib/libfork.so.0"
 install -m 755 "$init/init" "$payload/sbin/init"
 install -m 644 "$init/s6-linux-init.cpio" "$payload/boot/"
-install -m 644 "$init/COPYING.sixos" "$payload/usr/share/sixos/"
-install -m 755 "$repo/firmware/early-setup" "$payload/usr/share/sixos/bin/early-setup"
+install -m 644 "$init/COPYING.sixos" "$payload$profile/share/sixos/"
+install -m 755 "$repo/firmware/early-setup" "$payload$profile/bin/early-setup"
+cat > "$payload/sbin/init" <<'EOF'
+#!/bin/sh
+exec $profile/bin/s6-linux-init -v 2 -m 0022 -c "/run/init" -p "$profile/bin" -s "/run/boot" -N -B -- "$@"
+EOF
+chmod 755 "$payload/sbin/init"
 cat > "$payload/bin/activate" <<EOF
-#!/bin/bash
+#!/bin/sh
 set -eu
 mkdir -p /run
 rm -f /run/current-system
 ln -sfn "$profile" /run/current-system
-"$profile/usr/bin/s6-rc-init" -d -c "$profile/usr/share/sixos/db" /run/service
-"$profile/usr/bin/s6-rc" -v2 -up change default
+"$profile/bin/s6-rc-init" -d -c "$profile/share/sixos/db" /run/service
+"$profile/bin/s6-rc" -v2 -up change default
 EOF
 chmod 755 "$payload/bin/activate"
-# Shutdown uses busybox's applet path, independent of the distro symlink layout.
-ln -sf /bin/busybox "$payload/bin/reboot"
 cp -a "$services/." "$out/rc-source/"
-"$stack/host/usr/bin/s6-rc-compile" "$payload/usr/share/sixos/db" "$out/rc-source"
+$hostCompile "$payload/share/sixos/db" "$out/rc-source"
 # Add the completed, self-contained target tree to the host Nix store. The
 # returned content-addressed path is the path used by the firmware at runtime.
 system_store=$(nix store add --name reterminal-sixos-system "$payload")
@@ -85,7 +96,6 @@ test -d "$system_store"
 mkdir -p "$root/nix/store" "$root/nix/var/nix/profiles"
 cp -a "$system_store" "$root/nix/store/"
 ln -s "$system_store" "$root/nix/var/nix/profiles/system"
-for dir in bin sbin usr; do ln -s "$profile/$dir" "$root/$dir"; done
 ln -s "$profile" "$root/run/current-system"
 # ELF/ABI and dependency checks are mandatory before an image is emitted.
 python3 "$repo/tools/check-rootfs.py" "$root"

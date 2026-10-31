@@ -6,9 +6,9 @@ import sys
 
 # All host maker references must point to executables from the target stack.
 patterns = (
-    (re.compile(rb'/nix/store/[^/\s]+/bin/'), b'/usr/bin/'),
-    (re.compile(rb'/nix/store/[^/\s]+/sbin/'), b'/usr/sbin/'),
-    (re.compile(rb'/nix/store/[^/\s]+/libexec/'), b'/usr/libexec/'),
+    (re.compile(rb'/nix/store/[^/\s]+/bin/'), b'/nix/var/nix/profiles/system/bin/'),
+    (re.compile(rb'/nix/store/[^/\s]+/sbin/'), b'/nix/var/nix/profiles/system/bin/'),
+    (re.compile(rb'/nix/store/[^/\s]+/libexec/'), b'/nix/var/nix/profiles/system/libexec/'),
 )
 
 

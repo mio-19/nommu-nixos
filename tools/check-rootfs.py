@@ -98,9 +98,9 @@ def check(root):
             r'[0-9abcdfghijklmnpqrsvwxyz]{32}-reterminal-sixos-system', profile.name):
         raise ValueError('invalid target system closure in /nix/store')
     system = '/nix/var/nix/profiles/system'
-    for name in ('/bin/sh', '/sbin/init', system + '/usr/bin/s6-svscan',
-                 system + '/usr/bin/s6-supervise', system + '/usr/bin/s6-linux-init',
-                 system + '/usr/bin/s6-rc', system + '/bin/activate'):
+    for name in ('/bin/sh', '/sbin/init', system + '/bin/s6-svscan',
+                 system + '/bin/s6-supervise', system + '/bin/s6-linux-init',
+                 system + '/bin/s6-rc', system + '/bin/activate'):
         if not resolve(root, name).is_file():
             raise ValueError(f'missing required init executable {name}')
     print(f'Checked {count} Xtensa ELF files and their loaders/libraries')

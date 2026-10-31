@@ -12,7 +12,7 @@ cpio -id < "$template"
 python3 "$relocator" .
 # The catch-all logger FIFO is unusable on this NOMMU target, so stage one runs
 # without it (-B) and its diagnostics go straight to the console.
-sed -i 's| -N -- | -N -B -- |; s| -v 1 | -v 2 |' bin/init
+sed -i 's| -N -- | -N -B -- |; s| -v 1 | -v 2 |; s|/usr/bin|/nix/var/nix/profiles/system/bin|g; s|/usr/sbin|/nix/var/nix/profiles/system/bin|g; s|/usr/libexec|/nix/var/nix/profiles/system/libexec|g' bin/init
 # sixos hands off to the firmware's fixed Nix-store system activation script.
 install -m 755 "$rc_init" scripts/rc.init
 find . -print0 | cpio --null --create --format=newc > "$archive"
