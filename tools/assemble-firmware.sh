@@ -37,7 +37,10 @@ for program in micropython socat make nano curl mmu-run fork-test \
   fork-test-dynamic process-test jobq programbench atfork-test; do
   rm -f "$payload/usr/bin/$program"
 done
-mkdir -p "$payload/boot" "$payload/usr/share/sixos/bin" "$payload/usr/share/sixos/db" "$payload$profile/bin" "$payload$profile/lib" "$payload$profile/libexec" "$payload$profile/share/sixos" "$out/rc-source"
+mkdir -p "$payload/boot" "$payload/usr/share/sixos/bin" \
+  "$payload/usr/share/sixos/db" "$out/rc-source" \
+  "$payload$profile/bin" "$payload$profile/lib" "$payload$profile/libexec" \
+  "$payload$profile/share/sixos"
 runtime_bins=(
   execlineb background case cd define dollarat elgetopt elgetpositionals elglob eltest
   emptyenv envfile exec execline-cd execline-umask exit export export-array fdblock
