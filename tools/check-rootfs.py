@@ -84,7 +84,7 @@ def check(root):
                 raise ValueError(f'missing interpreter {interp}')
             for name in needed:
                 if '/' in name or not any(resolve(root, prefix + name).is_file()
-                                          for prefix in ('/lib/', '/usr/lib/')):
+                                          for prefix in ('/lib/', '/usr/lib/', '/nix/var/nix/profiles/system/lib/')):
                     raise ValueError(f'missing dependency {name}')
         except (ValueError, struct.error) as error:
             raise ValueError(f'{path.relative_to(root)}: {error}') from error
@@ -95,14 +95,36 @@ def check(root):
     except ValueError as error:
         raise ValueError('system profile does not resolve into /nix/store') from error
     if not profile.is_dir() or not re.fullmatch(
-            r'[0-9abcdfghijklmnpqrsvwxyz]{32}-reterminal-sixos-system', profile.name):
+            r'[0-9abcdfghijklmnpqrsvwxyz]{32}-six-system-reterminal-e1002-.+', profile.name):
         raise ValueError('invalid target system closure in /nix/store')
     system = '/nix/var/nix/profiles/system'
     for name in ('/bin/sh', '/sbin/init', system + '/bin/s6-svscan',
                  system + '/bin/s6-supervise', system + '/bin/s6-linux-init',
-                 system + '/bin/s6-rc', system + '/bin/activate'):
-        if not resolve(root, name).is_file():
-            raise ValueError(f'missing required init executable {name}')
+                 system + '/bin/s6-rc', system + '/bin/activate',
+                 system + '/boot/init', system + '/boot/s6-linux-init.cpio',
+                 system + '/six/s6-rc/db/resolve.cdb'):
+        executable = resolve(root, name)
+        if not executable.is_file():
+            raise ValueError(f'missing required boot file {name}')
+        if name.endswith(('/init', '/activate', '/s6-svscan', '/s6-supervise', '/s6-linux-init', '/s6-rc')) and not executable.stat().st_mode & 0o111:
+            raise ValueError(f'boot executable is not executable: {name}')
+    # Runtime closure references must resolve within the staged root, never on
+    # the build host. This also catches accidentally retained native packages.
+    store_pattern = re.compile(rb'/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[a-zA-Z0-9+._?=-]+')
+    for path in (root / 'nix/store').rglob('*'):
+        if path.is_symlink():
+            data = os.readlink(path).encode()
+        elif path.is_file():
+            data = path.read_bytes()
+            if data.startswith(b'#!'):
+                interpreter = data.splitlines()[0][2:].split()[0].decode()
+                if not resolve(root, interpreter).is_file():
+                    raise ValueError(f'{path.relative_to(root)}: missing script interpreter {interpreter}')
+        else:
+            continue
+        for reference in store_pattern.findall(data):
+            if not resolve(root, reference.decode()).exists():
+                raise ValueError(f'{path.relative_to(root)}: missing store object {reference.decode()}')
     print(f'Checked {count} Xtensa ELF files and their loaders/libraries')
 
 

@@ -1,0 +1,9 @@
+# These credentials exist only inside this disposable emulator run.
+5 uart0 root
+7 uart0 changeme123
+10 uart0 SixosEmulatorTestOnly26!
+12 uart0 SixosEmulatorTestOnly26!
+15 uart0 3
+18 uart0 id
+20 uart0 /nix/var/nix/profiles/system/bin/activate && echo SIXOS-REACTIVATE-OK
+24 uart0 /nix/var/nix/profiles/system/bin/s6-linux-init-shutdown -r now

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/dash
 set -eu
 # Match the mounts the upstream BusyBox init performed before rcS.
 mount -t proc proc /proc
@@ -13,4 +13,16 @@ ln -sf /proc/self/fd /dev/fd
 ln -sf /proc/self/fd/0 /dev/stdin
 ln -sf /proc/self/fd/1 /dev/stdout
 ln -sf /proc/self/fd/2 /dev/stderr
+# BusyBox passwd also rewrites passwd when updating shadow. Seed writable
+# identity files atomically so first-login provisioning continues to work.
+for name in passwd group; do
+  cp "/run/current-system/etc/$name" "/etc/$name.sixos-new"
+  chmod 644 "/etc/$name.sixos-new"
+  mv -f "/etc/$name.sixos-new" "/etc/$name"
+done
+for name in hosts hostname; do
+  ln -sf "/run/current-system/etc/$name" "/etc/$name"
+done
+mkdir -p /home/root /etc/profile.d
+printf '%s\n' 'export PATH="/run/current-system/bin:/bin:/sbin:/usr/bin:/usr/sbin"' > /etc/profile.d/sixos.sh
 hostname -F /etc/hostname

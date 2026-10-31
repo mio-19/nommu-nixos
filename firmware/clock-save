@@ -1,0 +1,4 @@
+#!/usr/bin/dash
+set -eu
+date -u +%s > /etc/hwclock-fake.new
+mv /etc/hwclock-fake.new /etc/hwclock-fake

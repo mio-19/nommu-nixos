@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a matched host/target skarnet stack rooted in the Nix store profile.
+# Build the target Skarnet stack, with an optional matching native build.
 # Upstream BusyBox stays at real FHS paths in the rootfs; the sixos/s6 stack
 # lives in the store and is referenced through /nix/var/nix/profiles/system.
 set -euo pipefail
@@ -12,7 +12,7 @@ linuxSource=$(realpath "${5:?Linux-on-esp32-S3 source tree}")
 xtensaConfig=${XTENSA_GNU_CONFIG:-"$(dirname "$sdk")/../../xtensa-dynconfig/esp32s3.so"}
 test -f "$xtensaConfig" || { echo "Missing ESP32-S3 Xtensa configuration: $xtensaConfig" >&2; exit 1; }
 xtensaConfig=$(realpath "$xtensaConfig")
-if [[ ${BUILD_SIDES:-host target} == *target* ]]; then test -x "$prefix-gcc"; fi
+if [[ ${BUILD_SIDES:-target} == *target* ]]; then test -x "$prefix-gcc"; fi
 test -f "$rootfs/usr/lib/libfork.so.0" || { echo "Missing libfork in rootfs; unpack rootfs with cramfsck first" >&2; exit 1; }
 bindir="/nix/var/nix/profiles/system/bin"
 libdir="/nix/var/nix/profiles/system/lib"
@@ -28,8 +28,8 @@ XTENSA_GNU_CONFIG="$xtensaConfig" "$prefix-gcc" -std=c99 -Os -mfdpic -mauto-litp
   -Wl,-soname,libfork.so.0 \
   "$linuxSource/experiments/mmu-poc/fork/fork-compat.c" \
   -o "$out/target$libdir/libfork.so.0"
-for side in ${BUILD_SIDES:-host target}; do
-  for package in skalibs execline s6 s6-rc s6-linux-init; do
+for side in ${BUILD_SIDES:-target}; do
+  for package in skalibs execline s6 s6-rc s6-linux-init s6-portable-utils; do
     build="$out/build/$side-$package"
     mkdir -p "$build"
     cp -a "$sources/$package/." "$build/"
@@ -83,19 +83,15 @@ path.write_text(source.replace(old, new))
 PY
     fi
     cd "$build"
-    options=(--prefix="$bindir" --bindir="$bindir" --sbindir="$bindir" --libdir="$libdir"
+    options=(--prefix="/nix/var/nix/profiles/system" --bindir="$bindir" --sbindir="$bindir" --libdir="$libdir"
+      --dynlibdir="$libdir"
       --libexecdir="$libexecdir" --includedir="$includedir" --sysconfdir="$sysconfdir"
       --disable-shared)
     if [[ $side == target ]]; then
-      export CC="$prefix-gcc" AR="$prefix-ar" RANLIB="$prefix-ranlib" STRIP="$prefix-strip"
-      export XTENSA_GNU_CONFIG="$xtensaConfig"
-      export CFLAGS="-Os -mfdpic -mauto-litpools -fPIC -D_BSD_SOURCE -ffunction-sections -fdata-sections -include $out/target$includedir/libfork-decls.h"
-      export LDFLAGS="-Wl,--gc-sections,-z,stack-size=65536 -Wl,-rpath,$libdir"
-      export LDLIBS="-Wl,--no-as-needed -L$out/target$libdir -l:libfork.so.0 -Wl,--as-needed"
       options+=(--host=xtensa-esp32s3-linux-uclibcfdpic)
-    else
-      export CC=gcc AR=ar RANLIB=ranlib STRIP=strip
-      unset CFLAGS LDFLAGS LDLIBS
+    fi
+    if [[ $package == skalibs ]]; then
+      options+=(--sysdepdir="$libdir/skalibs/sysdeps")
     fi
     if [[ $package == skalibs && $side == target ]]; then
       options+=(--with-sysdep-devurandom=yes --with-sysdep-posixspawnearlyreturn=no --with-sysdep-posixspawn=no
@@ -113,15 +109,15 @@ PY
       export CC="$prefix-gcc" AR="$prefix-ar" RANLIB="$prefix-ranlib" STRIP="$prefix-strip"
       export XTENSA_GNU_CONFIG="$xtensaConfig"
       export CFLAGS="-Os -mfdpic -mauto-litpools -fPIC -D_BSD_SOURCE -ffunction-sections -fdata-sections -include $out/target$includedir/libfork-decls.h"
-      export LDFLAGS="-Wl,--gc-sections,-z,stack-size=65536 -Wl,-rpath,$libdir"
+      export LDFLAGS="-Wl,--gc-sections,-z,stack-size=32768 -Wl,-rpath,$libdir"
       export LDLIBS="-Wl,--no-as-needed -L$out/target$libdir -l:libfork.so.0 -Wl,--as-needed"
     else
       export CC=gcc AR=ar RANLIB=ranlib STRIP=strip
-      export LDLIBS="-L$out/host$libdir -l:libfork.so.0 -Wl,--no-as-needed"
+      export LDLIBS=""
       unset CFLAGS LDFLAGS
     fi
     ./configure "${options[@]}"
     make -j"${JOBS:-8}" LDLIBS="${LDLIBS:-}"
     make DESTDIR="$out/$side" LDLIBS="${LDLIBS:-}" install
   done
- done
+done

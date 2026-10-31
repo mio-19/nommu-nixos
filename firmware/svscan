@@ -1,0 +1,3 @@
+#!/bin/sh
+# Bound the service tables to fit the NOMMU target's 32 KiB stack.
+exec /nix/var/nix/profiles/system/bin/s6-svscan.real -C 32 -L 48 "$@"

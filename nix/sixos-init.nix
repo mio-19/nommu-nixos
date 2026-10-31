@@ -2,17 +2,14 @@
 # Only the maker, fakeroot and cpio execute on the build host.
 { pkgs, sixos-src }:
 let
-  bindir = "/nix/var/nix/profiles/system/bin";
-  libdir = "/nix/var/nix/profiles/system/lib";
-  libexecdir = "/nix/var/nix/profiles/system/libexec";
   targetPath = {
-    outPath = bindir;
+    outPath = "/nix/var/nix/profiles/system";
   };
   targetBusybox = {
     outPath = "";
   };
   generated = pkgs.callPackage "${sixos-src}/mkConfiguration/s6-linux-init.nix" {
-    runtimeShell = "/bin/sh";
+    runtimeShell = "/usr/bin/dash";
     pkgs = {
       pkgsStatic.busybox = targetBusybox;
       busybox = targetBusybox;
@@ -33,32 +30,28 @@ pkgs.runCommand "sixos-esp32s3-init-template"
     nativeBuildInputs = [
       pkgs.cpio
       pkgs.python3
-      pkgs.fakeroot
     ];
-    postFixup = ''
-      sed -i '1c#!/bin/sh' $out/init
-      if grep -Fq '${generated}' $out/init; then
-        echo 'Host build store reference remains in the target init wrapper' >&2
-        exit 1
-      fi
-    '';
   }
   ''
     mkdir -p tree $out
     cd tree
     cat > $out/rc.init <<'RCINIT'
-    #!/bin/bash
+    #!/usr/bin/dash
     set -eu
     exec /nix/var/nix/profiles/system/bin/activate
     RCINIT
-    fakeroot bash ${../tools/package-sixos-init.sh} \
+    bash ${../tools/package-sixos-init.sh} \
       . "$out/s6-linux-init.cpio" "$out/rc.init" \
-      ${generated}/s6-linux-init.cpio ${../tools/relocate-init.py}
+      ${generated}/s6-linux-init.cpio ${../tools/relocate-init.py} ${../tools/init-cpio.py}
     cp ${generated}/boot/init $out/init
     chmod u+w $out/init
     sed -i '1c#!/bin/sh' $out/init
     # The upstream wrapper's archive lives in the fixed target root filesystem.
     substituteInPlace $out/init \
       --replace-fail '${generated}/s6-linux-init.cpio' '/nix/var/nix/profiles/system/boot/s6-linux-init.cpio'
+    if grep -Fq '/nix/store/' $out/init; then
+      echo 'Host store reference remains in the target init wrapper' >&2
+      exit 1
+    fi
     cp ${sixos-src}/COPYING.GPL3-ONLY $out/COPYING.sixos
   ''

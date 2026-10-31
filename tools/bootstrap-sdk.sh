@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run only the pinned upstream SDK stage, using rootless Podman.
 set -euo pipefail
-repo=${LINUX_ESP32_S3_SRC:-$(nix eval --raw "${NOMMU_REPO:-$(dirname "$0")/..}#inputs.linux-esp32-s3-src.outPath")}
+repo=${LINUX_ESP32_S3_SRC:-$(nix eval --raw "${NOMMU_REPO:-$(dirname "$0")/..}#lib.sources.linux.outPath")}
 work=$(realpath -m "${1:-.work}")
 mkdir -p "$work/Linux-on-esp32-S3"
 # Keep SDK state outside the Nix store. Never overwrite an existing build tree.

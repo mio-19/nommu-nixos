@@ -17,9 +17,9 @@ dev_shell="$repo#devShells.$system.default"
 if [[ ! -x $sdk/bin/xtensa-esp32s3-linux-uclibcfdpic-gcc ]]; then
   "$repo/tools/bootstrap-sdk.sh" "$work"
 fi
-if [[ ! -d $work/skarnet-sources/skalibs ]]; then
+if [[ ! -d $work/skarnet-sources/s6-portable-utils ]]; then
   nix build "$repo#skarnet-sources" --no-link --print-out-paths > "$work/skarnet-source-path"
-  ln -s "$(cat "$work/skarnet-source-path")" "$work/skarnet-sources"
+  ln -sfn "$(cat "$work/skarnet-source-path")" "$work/skarnet-sources"
 fi
 if [[ ! -d $root/usr ]]; then
   if [[ -d $root ]]; then
@@ -28,8 +28,13 @@ if [[ ! -d $root/usr ]]; then
   "$work/cramfs-tools/bin/cramfsck" -x "$root" "$source/images/rootfs.cramfs"
 fi
 nix develop "$dev_shell" -c bash "$repo/tools/build-skarnet.sh" "$sdk" "$stack" "$work/skarnet-sources" "$root" "$source"
-export SIXOS_INIT
-SIXOS_INIT=$(nix build "$repo#sixos-init" --no-link --print-out-paths)
+# Snapshot the completed cross-build as an input to the full sixos site.
+# Only the runtime outputs enter the configuration's runtime closure.
+nix store add --name esp32s3-skarnet-build "$stack" > "$work/stack-store-path"
+export SIXOS_CONFIGURATION
+SIXOS_CONFIGURATION=$(nix build --impure --file "$repo/nix/build-configuration.nix" \
+  --argstr repo "$repo" --argstr stack "$(cat "$work/stack-store-path")" \
+  --no-link --print-out-paths)
 export LINUX_ESP32_S3_SRC="$source"
 export CRAMFSCK="$work/cramfs-tools/bin/cramfsck"
 export MKCRAMFS="$work/cramfs-tools/bin/mkcramfs"

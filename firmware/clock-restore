@@ -1,0 +1,5 @@
+#!/usr/bin/dash
+set -eu
+if test -f /etc/hwclock-fake; then
+  date -u -s "@$(cat /etc/hwclock-fake)" >/dev/null || true
+fi

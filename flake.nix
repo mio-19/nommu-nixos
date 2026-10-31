@@ -14,7 +14,17 @@
   };
   outputs =
     inputs@{ nixpkgs, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (
+    {
+      lib.sources.linux = inputs.linux-esp32-s3-src;
+      lib.mkSixosSite =
+        { system, stack }:
+        import ./nix/sixos-site.nix {
+          inherit system stack nixpkgs;
+          sixos-src = inputs.sixos-src;
+          linux-src = inputs.linux-esp32-s3-src;
+        };
+    }
+    // flake-utils.lib.eachDefaultSystem (
       system:
       let
         pkgs = import nixpkgs { inherit system; };
@@ -31,7 +41,6 @@
             userspacePolicy = "Conventional C/C++; correctness assumed";
             firmwareReady = false;
             blockers = [
-              "full sixos site/configuration evaluation for the Xtensa target"
               "E1002 board support and matched kernel/ESP-IDF flash layout"
               "Hardware boot, peripheral validation, and memory/resource measurements"
             ];
@@ -51,23 +60,7 @@
           inherit pkgs;
           sixos-src = sources.sixos;
         };
-        sixosServices = import ./nix/sixos-services.nix {
-          inherit pkgs;
-          sixos-src = sources.sixos;
-          early-setup = ./firmware/early-setup;
-          console-run = ./firmware/console-run;
-        };
-        xipCramfs = pkgs.stdenv.mkDerivation {
-          pname = "cramfs-xip";
-          version = "2.1";
-          src = pkgs.fetchurl {
-            url = "https://github.com/npitre/cramfs-tools/archive/refs/tags/v2.1.tar.gz";
-            hash = "sha256-zbek7K0DTwY7ZFazfN9lOuMXWKIkwyFh5UcSqdfwHMM=";
-          };
-          buildInputs = [ pkgs.zlib ];
-          makeFlags = [ "CC=cc" ];
-          installPhase = "mkdir -p $out/bin; cp mkcramfs cramfsck $out/bin/";
-        };
+        xipCramfs = import ./nix/xip-cramfs.nix { inherit pkgs; };
         espEmuAssets = {
           x86_64-linux = {
             file = "esp-emu-0.51.0-x86_64-unknown-linux-gnu.tar.gz";
@@ -119,6 +112,7 @@
                     "s6"
                     "s6-rc"
                     "s6-linux-init"
+                    "s6-portable-utils"
                   ]
             );
         upstreamReference = pkgs.stdenvNoCC.mkDerivation {
@@ -160,7 +154,6 @@
           skarnet-sources = skarnetSources;
           cramfs-xip = xipCramfs;
           sixos-init = sixosInit;
-          sixos-service-source = sixosServices;
           esp-emu = espEmu;
         };
         apps.build-firmware = flake-utils.lib.mkApp {
@@ -185,6 +178,21 @@
             ];
             text = ''exec ${./tools/test-emulator.sh} "''${1:?Usage: nix run .#test-emulator -- IMAGE.bin [LOG]}" "''${2:-.work/esp-emu.log}"'';
           };
+        };
+        checks.sixos-init = sixosInit;
+        formatter = pkgs.writeShellApplication {
+          name = "format-nix";
+          runtimeInputs = [
+            pkgs.nixfmt
+            pkgs.git
+          ];
+          text = ''
+            while IFS= read -r -d "" file; do
+              if [[ -f "$file" ]]; then
+                nixfmt "$@" "$file"
+              fi
+            done < <(git ls-files -z --cached --others --exclude-standard -- '*.nix')
+          '';
         };
         checks.layout =
           pkgs.runCommand "reterminal-layout-check"
@@ -213,7 +221,6 @@
           LINUX_ESP32_S3_SRC = sources.linux;
           SIXOS_SRC = sources.sixos;
           SIXOS_INIT = sixosInit;
-          SIXOS_SERVICE_SOURCE = sixosServices;
           CRAMFSCK = "${xipCramfs}/bin/cramfsck";
           MKCRAMFS = "${xipCramfs}/bin/mkcramfs";
         };
