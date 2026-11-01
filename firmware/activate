@@ -1,7 +1,7 @@
 #!/usr/bin/dash
 set -eu
 system=/nix/var/nix/profiles/system
-export PATH="/run/current-system/bin:$system/bin:/bin:/sbin:/usr/bin:/usr/sbin"
+export PATH="/run/current-system/bin:$system/bin:$system/sw/bin:$system/sw/sbin:$system/sw/usr/bin:$system/sw/usr/sbin"
 mkdir -p /run/lock /run/service
 ln -sfn "$system" /run/current-system
 ln -sfn "$system" /run/system

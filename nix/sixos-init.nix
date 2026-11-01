@@ -19,7 +19,7 @@ let
     pkgsBuildHost = pkgs;
     buildPackages = pkgs;
     default-timezone = "UTC0";
-    initial-path = "/nix/var/nix/profiles/system/bin:/usr/bin:/usr/sbin:/bin:/sbin";
+    initial-path = "/nix/var/nix/profiles/system/bin:/nix/var/nix/profiles/system/sw/bin:/nix/var/nix/profiles/system/sw/sbin:/nix/var/nix/profiles/system/sw/usr/bin:/nix/var/nix/profiles/system/sw/usr/sbin";
     # The upstream kernel mounts devtmpfs on /dev at boot
     # (CONFIG_DEVTMPFS_MOUNT); an additional mount in stage one fails EBUSY.
     devtmpfs-mountpoint = null;

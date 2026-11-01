@@ -212,7 +212,7 @@ let
         '';
         extra-configuration-links."etc/profile" = pkgs.writeText "profile" ''
           # System-wide profile for sixos / NixOS
-          export PATH="/run/current-system/bin:/bin:/sbin:/usr/bin:/usr/sbin"
+          export PATH="/run/current-system/bin:/run/current-system/sw/bin:/run/current-system/sw/sbin:/run/current-system/sw/usr/bin:/run/current-system/sw/usr/sbin"
           export PAGER="less"
           export EDITOR="vi"
           if [ -d /etc/profile.d ]; then
