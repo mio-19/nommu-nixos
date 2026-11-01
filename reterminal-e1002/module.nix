@@ -30,6 +30,20 @@ in
 
     hardware.reterminal = {
       enable = lib.mkEnableOption "Alias for hardware.reterminal-e1002.enable";
+
+      deviceTree = {
+        name = lib.mkOption {
+          type = lib.types.str;
+          default = "esp32s3-reterminal-e1002.dtb";
+          description = "Name of the compiled device tree blob.";
+        };
+
+        source = lib.mkOption {
+          type = lib.types.path;
+          default = ./esp32s3-reterminal-e1002.dts;
+          description = "Device Tree Source file for reTerminal E1002.";
+        };
+      };
     };
 
     hardware.deviceTree = {
@@ -136,15 +150,103 @@ in
         };
       };
     };
+
+    networking.hostName = lib.mkOption {
+      type = lib.types.str;
+      default = "reterminal-e1002";
+      description = "The hostname of the system.";
+    };
+
+    time.timeZone = lib.mkOption {
+      type = lib.types.str;
+      default = "UTC";
+      description = "The default system time zone.";
+    };
+
+    users.users.root = {
+      home = lib.mkOption {
+        type = lib.types.str;
+        default = "/home/root";
+        description = "Root user home directory.";
+      };
+
+      shell = lib.mkOption {
+        type = lib.types.str;
+        default = "/bin/sh";
+        description = "Root user login shell.";
+      };
+    };
+
+    environment = {
+      systemPackages = lib.mkOption {
+        type = lib.types.listOf lib.types.package;
+        default = [ ];
+        description = "Set of packages added to the system environment.";
+      };
+
+      etc = lib.mkOption {
+        type = lib.types.attrsOf (
+          lib.types.submodule {
+            options = {
+              text = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Text of the file.";
+              };
+
+              source = lib.mkOption {
+                type = lib.types.nullOr lib.types.path;
+                default = null;
+                description = "Path of the source file.";
+              };
+
+              mode = lib.mkOption {
+                type = lib.types.str;
+                default = "0644";
+                description = "File permissions mode.";
+              };
+            };
+          }
+        );
+        default = { };
+        description = "Set of files to be linked or copied into /etc.";
+      };
+    };
+
+    system.stateVersion = lib.mkOption {
+      type = lib.types.str;
+      default = "26.11";
+      description = "NixOS / sixos state version.";
+    };
+
+    system.build = {
+      toplevel = lib.mkOption {
+        type = lib.types.package;
+        internal = true;
+        description = "The top-level system closure derivation.";
+      };
+    };
   };
 
-  config = lib.mkIf (cfg.enable || (config.hardware.reterminal.enable or false)) {
-    hardware.reterminal-e1002.enable = lib.mkDefault true;
-    hardware.deviceTree = {
-      enable = lib.mkDefault true;
-      name = lib.mkDefault cfg.deviceTree.name;
-    };
-    boot.loader.esp-idf.enable = lib.mkDefault true;
-    services.reterminal.enable = lib.mkDefault true;
-  };
+  config = lib.mkMerge [
+    (lib.mkIf (config.hardware.reterminal.enable or false) {
+      hardware.reterminal-e1002.enable = lib.mkDefault true;
+    })
+    (lib.mkIf cfg.enable {
+      hardware.deviceTree = {
+        enable = lib.mkDefault true;
+        name = lib.mkDefault cfg.deviceTree.name;
+      };
+      boot.loader.esp-idf.enable = lib.mkDefault true;
+      services.reterminal.enable = lib.mkDefault true;
+
+      system.build.toplevel =
+        pkgs.runCommand "nixos-system-${config.networking.hostName}-${config.system.stateVersion}" { }
+          ''
+            mkdir -p $out
+            echo "${config.networking.hostName}" > $out/hostname
+            echo "${config.system.stateVersion}" > $out/state-version
+          '';
+    })
+  ];
 }

@@ -34,6 +34,28 @@
       };
       nixosModules.reterminal-e1002 = ./reterminal-e1002/module.nix;
       nixosModules.default = ./reterminal-e1002/module.nix;
+      nixosConfigurations.reterminal-e1002 =
+        let
+          pkgs = import nixpkgs { system = "x86_64-linux"; };
+        in
+        pkgs.lib.evalModules {
+          specialArgs = { inherit pkgs; };
+          modules = [
+            ./reterminal-e1002/module.nix
+            ./configuration.nix
+          ];
+        };
+      nixosConfigurations.default =
+        let
+          pkgs = import nixpkgs { system = "x86_64-linux"; };
+        in
+        pkgs.lib.evalModules {
+          specialArgs = { inherit pkgs; };
+          modules = [
+            ./reterminal-e1002/module.nix
+            ./configuration.nix
+          ];
+        };
     }
     // flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ] (
       system:
@@ -350,9 +372,10 @@
           nixos-module =
             let
               eval = pkgs.lib.evalModules {
+                specialArgs = { inherit pkgs; };
                 modules = [
                   ./reterminal-e1002/module.nix
-                  { hardware.reterminal-e1002.enable = true; }
+                  ./configuration.nix
                 ];
               };
             in
@@ -365,6 +388,7 @@
               ''
                 test "${eval.config.boot.loader.esp-idf.chip}" = "esp32s3"
                 test "${eval.config.hardware.reterminal-e1002.deviceTree.name}" = "esp32s3-reterminal-e1002.dtb"
+                test "${eval.config.networking.hostName}" = "reterminal-e1002"
                 touch $out
               '';
         }

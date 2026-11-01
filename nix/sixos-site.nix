@@ -134,6 +134,36 @@ let
       else
         lib.callPackageWith targetPkgs path args;
   };
+  userConfig =
+    let
+      configFile = ./../configuration.nix;
+    in
+    if builtins.pathExists configFile then
+      (pkgs.lib.evalModules {
+        modules = [
+          ./../reterminal-e1002/module.nix
+          configFile
+        ];
+      }).config
+    else
+      (pkgs.lib.evalModules {
+        modules = [ ./../reterminal-e1002/module.nix ];
+      }).config;
+
+  extraEtcLinks = lib.mapAttrs' (
+    name: val:
+    let
+      drv =
+        if val.source != null then
+          val.source
+        else if val.text != null then
+          pkgs.writeText (baseNameOf name) val.text
+        else
+          throw "environment.etc.${name} must specify text or source";
+    in
+    lib.nameValuePair "etc/${name}" drv
+  ) userConfig.environment.etc;
+
   upstreamSite = import ./sixos-upstream.nix {
     inherit nixpkgs sixos-src;
     lib = targetLib;
@@ -144,144 +174,159 @@ let
       # complete host, even when no generic architecture tag matches.
       tags.is-esp32s3.overlays = [ (_: prev: prev) ];
       overlay = [ ];
-      hosts.reterminal-e1002 = final: prev: {
-        canonical = "xtensa-esp32s3-linux-uclibcfdpic";
-        pkgs = targetPkgs;
-        sw = base;
-        tags = prev.tags // {
-          is-esp32s3 = true;
-          has-initrd = false;
-          has-initrd-abduco = false;
-          has-initrd-lvm = false;
-          has-initrd-mount-root = false;
-          has-initrd-switch-root = false;
-        };
-        boot = prev.boot // {
-          kernel = prev.boot.kernel // {
-            package = base;
-            payload = "${linux-src}/images/xipImage";
-            image = "${linux-src}/images/xipImage";
-            modules = null;
-            firmware = null;
-            console = {
-              device = "ttyS0";
-              baud = 115200;
-            };
+      hosts.reterminal-e1002 =
+        final: prev:
+        let
+          hostName = userConfig.networking.hostName or "reterminal-e1002";
+        in
+        {
+          canonical = "xtensa-esp32s3-linux-uclibcfdpic";
+          pkgs = targetPkgs;
+          sw =
+            if userConfig.environment.systemPackages == [ ] then
+              base
+            else
+              pkgs.buildEnv {
+                name = "esp32s3-system-sw";
+                paths = [ base ] ++ userConfig.environment.systemPackages;
+              };
+          tags = prev.tags // {
+            is-esp32s3 = true;
+            has-initrd = false;
+            has-initrd-abduco = false;
+            has-initrd-lvm = false;
+            has-initrd-mount-root = false;
+            has-initrd-switch-root = false;
           };
-          # No initrd is loaded by the ESP32 bootloader. Upstream also emits
-          # a kexec helper; supply an empty archive before removing that helper.
-          initrd.image = pkgs.writeText "no-esp32-initrd" "";
-        };
-        users.root = {
-          shell = "/usr/bin/user-shell";
-          home-directory = "/home/root";
-          # Keep the persistent shadow hash and upstream first-login flow.
-          hashed-password = "x";
-        };
-        extra-configuration-links."etc/hostname" = pkgs.writeText "hostname" "reterminal-e1002\n";
-        extra-configuration-links."etc/os-release" = pkgs.writeText "os-release" ''
-          NAME="sixos"
-          ID=sixos
-          ID_LIKE=nixos
-          VERSION="26.11 (NOMMU)"
-          VERSION_ID="26.11"
-          VERSION_CODENAME="nommu"
-          PRETTY_NAME="sixos 26.11 on Seeed reTerminal E1002 (ESP32-S3 NOMMU)"
-          HOME_URL="https://codeberg.org/amjoseph/sixos"
-          SUPPORT_URL="https://github.com/mio-19/nommu-nixos"
-          BUG_REPORT_URL="https://github.com/mio-19/nommu-nixos/issues"
-          DOCUMENTATION_URL="https://codeberg.org/amjoseph/sixos"
-          LOGO="sixos"
-          VARIANT="Seeed reTerminal E1002"
-          VARIANT_ID=reterminal-e1002
-        '';
-        extra-configuration-links."etc/issue" = pkgs.writeText "issue" ''
-          <<< Welcome to sixos 26.11 on Seeed reTerminal E1002 (\m) - \l >>>
+          boot = prev.boot // {
+            kernel = prev.boot.kernel // {
+              package = base;
+              payload = "${linux-src}/images/xipImage";
+              image = "${linux-src}/images/xipImage";
+              modules = null;
+              firmware = null;
+              console = {
+                device = "ttyS0";
+                baud = 115200;
+              };
+            };
+            # No initrd is loaded by the ESP32 bootloader. Upstream also emits
+            # a kexec helper; supply an empty archive before removing that helper.
+            initrd.image = pkgs.writeText "no-esp32-initrd" "";
+          };
+          users.root = {
+            shell = "/usr/bin/user-shell";
+            home-directory = userConfig.users.users.root.home or "/home/root";
+            # Keep the persistent shadow hash and upstream first-login flow.
+            hashed-password = "x";
+          };
+          extra-configuration-links = {
+            "etc/hostname" = pkgs.writeText "hostname" "${hostName}\n";
+            "etc/os-release" = pkgs.writeText "os-release" ''
+              NAME="sixos"
+              ID=sixos
+              ID_LIKE=nixos
+              VERSION="26.11 (NOMMU)"
+              VERSION_ID="26.11"
+              VERSION_CODENAME="nommu"
+              PRETTY_NAME="sixos 26.11 on Seeed reTerminal E1002 (ESP32-S3 NOMMU)"
+              HOME_URL="https://codeberg.org/amjoseph/sixos"
+              SUPPORT_URL="https://github.com/mio-19/nommu-nixos"
+              BUG_REPORT_URL="https://github.com/mio-19/nommu-nixos/issues"
+              DOCUMENTATION_URL="https://codeberg.org/amjoseph/sixos"
+              LOGO="sixos"
+              VARIANT="Seeed reTerminal E1002"
+              VARIANT_ID=reterminal-e1002
+            '';
+            "etc/issue" = pkgs.writeText "issue" ''
+              <<< Welcome to sixos 26.11 on Seeed reTerminal E1002 (\m) - \l >>>
 
-        '';
-        extra-configuration-links."etc/shells" = pkgs.writeText "shells" ''
-          /bin/sh
-          /bin/dash
-          /usr/bin/dash
-          /bin/ash
-          /usr/bin/user-shell
-        '';
-        extra-configuration-links."etc/nsswitch.conf" = pkgs.writeText "nsswitch.conf" ''
-          passwd: files
-          group: files
-          shadow: files
-          hosts: files dns
-          networks: files
-          protocols: files
-          services: files
-          ethers: files
-          rpc: files
-        '';
-        extra-configuration-links."etc/profile" = pkgs.writeText "profile" ''
-          # System-wide profile for sixos / NixOS
-          export PATH="/run/current-system/bin:/run/current-system/sw/bin:/run/current-system/sw/sbin:/run/current-system/sw/usr/bin:/run/current-system/sw/usr/sbin"
-          export SHELL="/bin/sh"
-          export USER="root"
-          export LOGNAME="root"
-          export HOME="/home/root"
-          export TERM="''${TERM:-vt100}"
-          export PAGER="less"
-          export EDITOR="vi"
-          if [ -d /etc/profile.d ]; then
-            for i in /etc/profile.d/*.sh; do
-              if [ -r "$i" ]; then
-                . "$i"
+            '';
+            "etc/shells" = pkgs.writeText "shells" ''
+              /bin/sh
+              /bin/dash
+              /usr/bin/dash
+              /bin/ash
+              /usr/bin/user-shell
+            '';
+            "etc/nsswitch.conf" = pkgs.writeText "nsswitch.conf" ''
+              passwd: files
+              group: files
+              shadow: files
+              hosts: files dns
+              networks: files
+              protocols: files
+              services: files
+              ethers: files
+              rpc: files
+            '';
+            "etc/profile" = pkgs.writeText "profile" ''
+              # System-wide profile for sixos / NixOS
+              export PATH="/run/current-system/bin:/run/current-system/sw/bin:/run/current-system/sw/sbin:/run/current-system/sw/usr/bin:/run/current-system/sw/usr/sbin"
+              export SHELL="/bin/sh"
+              export USER="root"
+              export LOGNAME="root"
+              export HOME="/home/root"
+              export TERM="''${TERM:-vt100}"
+              export PAGER="less"
+              export EDITOR="vi"
+              if [ -d /etc/profile.d ]; then
+                for i in /etc/profile.d/*.sh; do
+                  if [ -r "$i" ]; then
+                    . "$i"
+                  fi
+                done
+                unset i
               fi
-            done
-            unset i
-          fi
-        '';
-        # The board has no validated RTC. Save the clock at service shutdown
-        # instead of running an additional periodic process on 8 MiB PSRAM.
-        services = prev.services // {
-          hwclock-fake =
-            _:
-            final.six.mkOneshot {
-              up = "/bin/sh ${./../firmware/clock-restore}";
+            '';
+          }
+          // extraEtcLinks;
+          # The board has no validated RTC. Save the clock at service shutdown
+          # instead of running an additional periodic process on 8 MiB PSRAM.
+          services = prev.services // {
+            hwclock-fake =
+              _:
+              final.six.mkOneshot {
+                up = "/bin/sh ${./../firmware/clock-restore}";
+                passthru = {
+                  before = [ final.targets.global.hwclock ];
+                  after = [ final.targets.early-setup ];
+                };
+              };
+            hwclock-fake-updater =
+              _:
+              final.six.mkOneshot {
+                up = "/bin/true";
+                down = "/bin/sh ${./../firmware/clock-save}";
+                passthru.after = [
+                  final.targets.early-setup
+                  final.targets.global.hwclock
+                ];
+              };
+          };
+          targets = {
+            default = final.six.mkBundle { };
+            global.hwclock = final.six.mkBundle { };
+            early-setup = final.six.mkOneshot {
+              up = "/bin/sh ${./../firmware/early-setup}";
+            };
+            console = final.six.mkService {
+              type = "longrun";
+              up = builtins.readFile ../firmware/console-run;
+              # Interactive login shells ignore SIGTERM. Hang up the session
+              # on shutdown, with a finite kill timeout for a stuck client.
+              extraCommands = ''
+                cp $out/up $out/run
+                echo HUP > $out/down-signal
+                echo 5000 > $out/timeout-kill
+              '';
               passthru = {
-                before = [ final.targets.global.hwclock ];
+                logger = false;
                 after = [ final.targets.early-setup ];
               };
             };
-          hwclock-fake-updater =
-            _:
-            final.six.mkOneshot {
-              up = "/bin/true";
-              down = "/bin/sh ${./../firmware/clock-save}";
-              passthru.after = [
-                final.targets.early-setup
-                final.targets.global.hwclock
-              ];
-            };
-        };
-        targets = {
-          default = final.six.mkBundle { };
-          global.hwclock = final.six.mkBundle { };
-          early-setup = final.six.mkOneshot {
-            up = "/bin/sh ${./../firmware/early-setup}";
-          };
-          console = final.six.mkService {
-            type = "longrun";
-            up = builtins.readFile ../firmware/console-run;
-            # Interactive login shells ignore SIGTERM. Hang up the session
-            # on shutdown, with a finite kill timeout for a stuck client.
-            extraCommands = ''
-              cp $out/up $out/run
-              echo HUP > $out/down-signal
-              echo 5000 > $out/timeout-kill
-            '';
-            passthru = {
-              logger = false;
-              after = [ final.targets.early-setup ];
-            };
           };
         };
-      };
     };
   };
   upstreamHost = upstreamSite.hosts.reterminal-e1002;
