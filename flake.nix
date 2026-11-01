@@ -53,19 +53,33 @@
             revisions = builtins.mapAttrs (_: src: src.rev) sources;
           }
         );
-        portingKit = pkgs.runCommand "reterminal-e1002-porting-kit" { } ''
-          mkdir -p $out/sources $out/docs $out/board $out/services
-          ln -s ${sources.linux} $out/sources/linux-esp32-s3
-          ln -s ${sources.sixos} $out/sources/sixos
-          cp ${manifest} $out/port-status.json
-          cp ${./README.md} $out/README.md
-          cp ${./docs/porting.md} $out/docs/porting.md
-          cp ${./reterminal-e1002/partitions_32mb.csv} $out/board/partitions_32mb.PROPOSED.csv
-          cp ${./reterminal-e1002/esp32s3-reterminal-e1002.dts} $out/board/esp32s3-reterminal-e1002.dts
-          cp ${./reterminal-e1002/README.md} $out/board/README.md
-          cp ${./reterminal-e1002/module.nix} $out/board/module.nix
-          cp -r ${./reterminal-e1002/services}/. $out/services/
-        '';
+        portingKit = pkgs.stdenvNoCC.mkDerivation {
+          pname = "reterminal-e1002-porting-kit";
+          version = "0.1.0";
+          dontUnpack = true;
+          dontBuild = true;
+          installPhase = ''
+            runHook preInstall
+            mkdir -p $out/sources $out/docs $out/board $out/services
+            ln -s ${sources.linux} $out/sources/linux-esp32-s3
+            ln -s ${sources.sixos} $out/sources/sixos
+            cp ${manifest} $out/port-status.json
+            cp ${./README.md} $out/README.md
+            cp ${./docs/porting.md} $out/docs/porting.md
+            cp ${./reterminal-e1002/partitions_32mb.csv} $out/board/partitions_32mb.PROPOSED.csv
+            cp ${./reterminal-e1002/esp32s3-reterminal-e1002.dts} $out/board/esp32s3-reterminal-e1002.dts
+            cp ${./reterminal-e1002/README.md} $out/board/README.md
+            cp ${./reterminal-e1002/module.nix} $out/board/module.nix
+            cp -r ${./reterminal-e1002/services}/. $out/services/
+            runHook postInstall
+          '';
+          meta = with pkgs.lib; {
+            description = "Porting kit, DTS, partition layout, and peripheral services for Seeed reTerminal E1002";
+            homepage = "https://github.com/mio-19/nommu-nixos";
+            license = licenses.mit;
+            platforms = platforms.all;
+          };
+        };
         sixosInit =
           if pkgs.stdenv.hostPlatform.isLinux then
             import ./nix/sixos-init.nix {
@@ -101,10 +115,23 @@
               dontUnpack = true;
               nativeBuildInputs = [ pkgs.gnutar ];
               installPhase = ''
+                runHook preInstall
                 mkdir -p $out/bin
                 tar -xzf $src --strip-components=1 -C $out/bin
                 chmod 755 $out/bin/esp-emu
+                runHook postInstall
               '';
+              meta = with pkgs.lib; {
+                description = "Espressif chip emulator for ESP32 family";
+                homepage = "https://github.com/espressif/esp-emulator";
+                license = licenses.asl20;
+                platforms = [
+                  "x86_64-linux"
+                  "aarch64-linux"
+                  "aarch64-darwin"
+                ];
+                mainProgram = "esp-emu";
+              };
             }
           else
             null;
@@ -115,6 +142,12 @@
                 pkgs.gnutar
                 pkgs.gzip
               ];
+              meta = with pkgs.lib; {
+                description = "Pinned Skarnet sources (skalibs, execline, s6, s6-rc, s6-linux-init, s6-portable-utils)";
+                homepage = "https://skarnet.org/software/";
+                license = licenses.isc;
+                platforms = platforms.all;
+              };
             }
             (
               "mkdir -p $out\n"
@@ -157,11 +190,19 @@
             runHook postBuild
           '';
           installPhase = ''
+            runHook preInstall
             mkdir -p $out
             cp reference.bin $out/esp32s3-16mb-upstream-reference.bin
             cp ${manifest} $out/port-status.json
             echo 'Upstream prebuilt 16MB devkit reference only. No sixos. E1002 untested.' > $out/README
+            runHook postInstall
           '';
+          meta = with pkgs.lib; {
+            description = "Prebuilt 16MB reference firmware image for ESP32-S3 from Linux-on-esp32-S3";
+            homepage = "https://github.com/paulneja/Linux-on-esp32-S3";
+            license = licenses.gpl2Plus;
+            platforms = platforms.all;
+          };
         };
       in
       {
@@ -271,6 +312,9 @@
             pkgs.runCommand "reterminal-layout-check"
               {
                 nativeBuildInputs = [ pkgs.python3 ];
+                meta = with pkgs.lib; {
+                  description = "Validate proposed 32MB partition table bounds, layout, and offsets";
+                };
               }
               ''
                 python3 ${./tools/check-layout.py} ${./reterminal-e1002/partitions_32mb.csv} --flash-bytes 33554432
@@ -285,6 +329,9 @@
                   pkgs.dash
                   pkgs.python3
                 ];
+                meta = with pkgs.lib; {
+                  description = "Validate Python AST and dash/bash shell script syntax across repository";
+                };
               }
               ''
                 python3 -c "import ast, glob; [ast.parse(open(f, 'rb').read(), f) for f in glob.glob('${./tools}/*.py')]"
@@ -304,11 +351,17 @@
                 ];
               };
             in
-            pkgs.runCommand "reterminal-nixos-module-check" { } ''
-              test "${eval.config.boot.loader.esp-idf.chip}" = "esp32s3"
-              test "${eval.config.hardware.reterminal-e1002.deviceTree.name}" = "esp32s3-reterminal-e1002.dtb"
-              touch $out
-            '';
+            pkgs.runCommand "reterminal-nixos-module-check"
+              {
+                meta = with pkgs.lib; {
+                  description = "Verify NixOS module evaluation and type compliance via lib.evalModules";
+                };
+              }
+              ''
+                test "${eval.config.boot.loader.esp-idf.chip}" = "esp32s3"
+                test "${eval.config.hardware.reterminal-e1002.deviceTree.name}" = "esp32s3-reterminal-e1002.dtb"
+                touch $out
+              '';
         }
         // pkgs.lib.optionalAttrs (sixosInit != null) {
           sixos-init = sixosInit;
@@ -346,6 +399,9 @@
           SIXOS_INIT = sixosInit;
           CRAMFSCK = "${xipCramfs}/bin/cramfsck";
           MKCRAMFS = "${xipCramfs}/bin/mkcramfs";
+          meta = with pkgs.lib; {
+            description = "Development environment for Xtensa ESP32-S3 firmware and sixos porting";
+          };
         };
       }
     );

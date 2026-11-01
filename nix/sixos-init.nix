@@ -31,6 +31,12 @@ pkgs.runCommand "sixos-esp32s3-init-template"
       pkgs.cpio
       pkgs.python3
     ];
+    meta = with pkgs.lib; {
+      description = "sixos stage-one init archive and wrapper for ESP32-S3 NOMMU";
+      homepage = "https://codeberg.org/amjoseph/sixos";
+      license = licenses.gpl3Only;
+      platforms = platforms.linux;
+    };
   }
   ''
     mkdir -p tree $out

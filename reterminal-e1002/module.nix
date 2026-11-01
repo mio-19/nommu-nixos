@@ -11,11 +11,7 @@ in
 {
   options = {
     hardware.reterminal-e1002 = {
-      enable = lib.mkOption {
-        type = lib.types.bool;
-        default = true;
-        description = "Enable Seeed reTerminal E1002 hardware platform support.";
-      };
+      enable = lib.mkEnableOption "Seeed reTerminal E1002 hardware platform support";
 
       deviceTree = {
         name = lib.mkOption {
@@ -23,6 +19,7 @@ in
           default = "esp32s3-reterminal-e1002.dtb";
           description = "Name of the compiled device tree blob.";
         };
+
         source = lib.mkOption {
           type = lib.types.path;
           default = ./esp32s3-reterminal-e1002.dts;
@@ -33,6 +30,7 @@ in
 
     hardware.deviceTree = {
       enable = lib.mkEnableOption "Device Tree support";
+
       name = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
@@ -56,13 +54,24 @@ in
       };
 
       flashMode = lib.mkOption {
-        type = lib.types.str;
+        type = lib.types.enum [
+          "dio"
+          "qio"
+          "dout"
+          "qout"
+          "opi"
+          "qpi"
+        ];
         default = "dio";
-        description = "SPI flash mode (dio, qio, opi, etc.).";
+        description = "SPI flash mode.";
       };
 
       flashFreq = lib.mkOption {
-        type = lib.types.str;
+        type = lib.types.enum [
+          "40m"
+          "80m"
+          "120m"
+        ];
         default = "80m";
         description = "SPI flash frequency.";
       };
