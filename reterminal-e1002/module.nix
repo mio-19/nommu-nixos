@@ -1,29 +1,114 @@
-# NixOS / sixos module for Seeed reTerminal E1002
+# NixOS module for Seeed reTerminal E1002 (ESP32-S3 NOMMU)
 {
   config,
   lib,
   pkgs,
   ...
 }:
+let
+  cfg = config.hardware.reterminal-e1002;
+in
 {
-  hardware.deviceTree = {
-    name = "esp32s3-reterminal-e1002.dtb";
-    source = ./esp32s3-reterminal-e1002.dts;
+  options = {
+    hardware.reterminal-e1002 = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable Seeed reTerminal E1002 hardware platform support.";
+      };
+
+      deviceTree = {
+        name = lib.mkOption {
+          type = lib.types.str;
+          default = "esp32s3-reterminal-e1002.dtb";
+          description = "Name of the compiled device tree blob.";
+        };
+        source = lib.mkOption {
+          type = lib.types.path;
+          default = ./esp32s3-reterminal-e1002.dts;
+          description = "Device Tree Source file for reTerminal E1002.";
+        };
+      };
+    };
+
+    hardware.deviceTree = {
+      enable = lib.mkEnableOption "Device Tree support";
+      name = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Default DTB file to load.";
+      };
+    };
+
+    boot.loader.esp-idf = {
+      enable = lib.mkEnableOption "ESP-IDF bootloader configuration";
+
+      chip = lib.mkOption {
+        type = lib.types.str;
+        default = "esp32s3";
+        description = "Target ESP32 microcontroller SoC.";
+      };
+
+      flashSize = lib.mkOption {
+        type = lib.types.str;
+        default = "32MB";
+        description = "SPI flash size.";
+      };
+
+      flashMode = lib.mkOption {
+        type = lib.types.str;
+        default = "dio";
+        description = "SPI flash mode (dio, qio, opi, etc.).";
+      };
+
+      flashFreq = lib.mkOption {
+        type = lib.types.str;
+        default = "80m";
+        description = "SPI flash frequency.";
+      };
+
+      partitionTable = lib.mkOption {
+        type = lib.types.path;
+        default = ./partitions_32mb.csv;
+        description = "ESP-IDF partition table CSV.";
+      };
+    };
+
+    services.reterminal = {
+      enable = lib.mkEnableOption "reTerminal E1002 peripheral supervision services";
+
+      buttons = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable GPIO buttons (3, 4, 5), status LED (6), and buzzer (45) service.";
+        };
+      };
+
+      epaper = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable 7.3-inch Spectra 6 ED2208 ePaper driver daemon on SPI2.";
+        };
+      };
+
+      sensors = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable SHT40, PCF8563 RTC, and battery ADC telemetry polling service.";
+        };
+      };
+    };
   };
 
-  boot.loader.esp-idf = {
-    chip = "esp32s3";
-    flashSize = "32MB";
-    flashMode = "dio";
-    flashFreq = "80m";
-    partitionTable = ./partitions_32mb.csv;
-  };
-
-  # reTerminal E1002 hardware peripheral services
-  services.reterminal = {
-    enable = lib.mkDefault true;
-    buttons.enable = lib.mkDefault true;
-    epaper.enable = lib.mkDefault true;
-    sensors.enable = lib.mkDefault true;
+  config = lib.mkIf cfg.enable {
+    hardware.deviceTree = {
+      enable = lib.mkDefault true;
+      name = lib.mkDefault cfg.deviceTree.name;
+    };
+    boot.loader.esp-idf.enable = lib.mkDefault true;
+    services.reterminal.enable = lib.mkDefault true;
   };
 }

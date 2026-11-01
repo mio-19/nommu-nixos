@@ -23,10 +23,12 @@
           sixos-src = inputs.sixos-src;
           linux-src = inputs.linux-esp32-s3-src;
         };
+      lib.sixosModules = {
+        reterminal-e1002 = ./reterminal-e1002/module.nix;
+        default = ./reterminal-e1002/module.nix;
+      };
       nixosModules.reterminal-e1002 = ./reterminal-e1002/module.nix;
       nixosModules.default = ./reterminal-e1002/module.nix;
-      sixosModules.reterminal-e1002 = ./reterminal-e1002/module.nix;
-      sixosModules.default = ./reterminal-e1002/module.nix;
     }
     // flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ] (
       system:
@@ -293,6 +295,20 @@
                 done
                 touch $out
               '';
+          nixos-module =
+            let
+              eval = pkgs.lib.evalModules {
+                modules = [
+                  ./reterminal-e1002/module.nix
+                  { hardware.reterminal-e1002.enable = true; }
+                ];
+              };
+            in
+            pkgs.runCommand "reterminal-nixos-module-check" { } ''
+              test "${eval.config.boot.loader.esp-idf.chip}" = "esp32s3"
+              test "${eval.config.hardware.reterminal-e1002.deviceTree.name}" = "esp32s3-reterminal-e1002.dtb"
+              touch $out
+            '';
         }
         // pkgs.lib.optionalAttrs (sixosInit != null) {
           sixos-init = sixosInit;
