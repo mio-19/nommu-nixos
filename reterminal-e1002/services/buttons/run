@@ -1,0 +1,88 @@
+#!/usr/bin/dash
+# s6 service: button and indicator supervisor for Seeed reTerminal E1002
+# Hardware: Left (GPIO 3), Middle (GPIO 4), Right (GPIO 5), LED (GPIO 6), Buzzer (GPIO 45)
+# Dispatches actions to /run/epaper/cmd and provides acoustic/visual feedback.
+set -eu
+
+echo "[buttons] Starting reTerminal E1002 button & indicator service..."
+
+export_pin() {
+    pin="$1"
+    dir="$2"
+    if [ ! -d "/sys/class/gpio/gpio$pin" ]; then
+        echo "$pin" > /sys/class/gpio/export 2>/dev/null || true
+    fi
+    if [ -d "/sys/class/gpio/gpio$pin" ]; then
+        echo "$dir" > "/sys/class/gpio/gpio$pin/direction" 2>/dev/null || true
+    fi
+}
+
+# Export buttons (inputs)
+export_pin 3 in
+export_pin 4 in
+export_pin 5 in
+
+# Export LED (active-low output) and buzzer (active-high output)
+export_pin 6 out
+export_pin 45 out
+
+# Turn status LED on (0 is on, active-low)
+if [ -f /sys/class/gpio/gpio6/value ]; then
+    echo "0" > /sys/class/gpio/gpio6/value 2>/dev/null || true
+fi
+
+beep() {
+    duration_ms="${1:-50}"
+    if [ -f /sys/class/gpio/gpio45/value ]; then
+        echo "1" > /sys/class/gpio/gpio45/value 2>/dev/null || true
+        usleep "$((duration_ms * 1000))" 2>/dev/null || sleep 1
+        echo "0" > /sys/class/gpio/gpio45/value 2>/dev/null || true
+    fi
+}
+
+send_cmd() {
+    cmd="$1"
+    if [ -e /run/epaper/cmd ]; then
+        printf '%s\n' "$cmd" > /run/epaper/cmd 2>/dev/null || true
+    fi
+}
+
+cleanup() {
+    echo "[buttons] Stopping button service..."
+    # Turn off LED and buzzer
+    [ -f /sys/class/gpio/gpio6/value ] && echo "1" > /sys/class/gpio/gpio6/value 2>/dev/null || true
+    [ -f /sys/class/gpio/gpio45/value ] && echo "0" > /sys/class/gpio/gpio45/value 2>/dev/null || true
+    exit 0
+}
+
+trap cleanup INT TERM HUP
+
+echo "[buttons] Monitoring GPIO3 (Left), GPIO4 (Mid), GPIO5 (Right)..."
+
+# Initial ready chirp
+beep 30
+
+while true; do
+    b_left=$(cat /sys/class/gpio/gpio3/value 2>/dev/null || echo "1")
+    b_mid=$(cat /sys/class/gpio/gpio4/value 2>/dev/null || echo "1")
+    b_right=$(cat /sys/class/gpio/gpio5/value 2>/dev/null || echo "1")
+
+    if [ "$b_left" = "0" ]; then
+        echo "[buttons] Left pressed -> Refresh display"
+        beep 40
+        send_cmd "refresh"
+        sleep 1
+    elif [ "$b_mid" = "0" ]; then
+        echo "[buttons] Middle pressed -> Toggle system dashboard"
+        beep 40
+        send_cmd "status"
+        sleep 1
+    elif [ "$b_right" = "0" ]; then
+        echo "[buttons] Right pressed -> Next screen view"
+        beep 40
+        send_cmd "next"
+        sleep 1
+    fi
+
+    usleep 100000 2>/dev/null || sleep 1
+done

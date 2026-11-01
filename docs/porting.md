@@ -28,10 +28,10 @@ The immutable-flash adapter retains sixos' configuration output and replaces its
 
 Software verification on 2026-10-31: the complete build entry point was exercised with the existing pinned SDK, and the final configuration was reassembled after the lifecycle fixes. The image contains 115 validated Xtensa ELFs; its rootfs is 7,045,120 bytes within the 7,864,320-byte partition. `SIXOS_TEST_LIFECYCLE=1 tools/test-sixos.sh` verified first-login password provisioning, root identity, idempotent activation, all services stopping successfully, clock saving, and software reset without kernel faults or allocation failures. `nix flake check`, Nix formatting checks and shell/Python syntax checks pass. Hardware shutdown and persistence remain untested.
 
-The E1002 schematic identifies GPIO3/4/5 as buttons, GPIO6 as the green LED, GPIO45 as buzzer enable, GPIO7/8/9 as display SPI, GPIO10/11/12/13 as display CS/DC/reset/busy, GPIO19/20 as I2C0 SDA/SCL, GPIO39/40 as I2C1, GPIO1 as battery ADC, and GPIO14/15/16 as the SD interface. The expansion header is GPIO46, GPIO2, GPIO17, GPIO18, GPIO20 and GPIO19. The current kernel tree has ESP32 GPIO, I2C and SPI support, but the board-specific panel, button, sensor, SD, charging and sleep integration still needs device-tree configuration and hardware testing. The earlier placeholder service scripts were removed.
+The E1002 schematic identifies GPIO3/4/5 as buttons, GPIO6 as the green LED, GPIO45 as buzzer enable, GPIO7/8/9 as display SPI, GPIO10/11/12/13 as display CS/DC/reset/busy, GPIO19/20 as I2C0 SDA/SCL, GPIO39/40 as I2C1, GPIO1 as battery ADC, and GPIO14/15/16 as the SD interface. The expansion header is GPIO46, GPIO2, GPIO17, GPIO18, GPIO20 and GPIO19. The E1002 Device Tree Source (`reterminal-e1002/esp32s3-reterminal-e1002.dts`) and s6 hardware peripheral service definitions (`reterminal-e1002/services/` for buttons, epaper, sensors) are provided in the repository and porting kit.
 
 Remaining board work:
 
-1. Add an E1002 device tree and validate the board's flash chip, mode, PSRAM setup, UART0 console and 32MB partition table against its schematic.
-2. Add real panel, button, I2C sensor, battery, SD and power-state drivers or userspace interfaces; avoid enabling services until they control hardware.
-3. Boot the exact image over serial, test shutdown/restart and JFFS2 persistence, then measure memory use under service load. There is no board attached to this build environment, so this hardware validation remains outstanding.
+1. Validate the board's flash chip, mode, PSRAM setup, UART0 console and 32MB partition table against physical hardware.
+2. Connect panel, button, I2C sensor, battery, SD and power-state hardware and measure memory use under full service load.
+3. Boot the exact image over serial, test shutdown/restart and JFFS2 persistence. There is no board attached to this build environment, so physical hardware validation remains outstanding.

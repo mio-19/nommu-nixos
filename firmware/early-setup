@@ -20,7 +20,7 @@ for name in passwd group; do
   chmod 644 "/etc/$name.sixos-new"
   mv -f "/etc/$name.sixos-new" "/etc/$name"
 done
-for name in hosts hostname; do
+for name in hosts hostname os-release issue; do
   ln -sf "/run/current-system/etc/$name" "/etc/$name"
 done
 mkdir -p /home/root /etc/profile.d

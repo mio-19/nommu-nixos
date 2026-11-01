@@ -1,0 +1,216 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * Device Tree Source for Seeed reTerminal E1002
+ * Hardware: ESP32-S3 (32MB Flash, 8MB PSRAM), 7.3" Spectra 6 ePaper Display,
+ *           SHT40 Temp/Humidity, PCF8563 RTC, 3 Buttons, Green LED, Buzzer, SD.
+ * Schematic Ref: Seeed reTerminal E1002 V1.2 (202004321)
+ */
+/dts-v1/;
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+#include "gpio-esp32.h"
+#include "esp32s3.dtsi"
+
+/ {
+	model = "Seeed reTerminal E1002";
+	compatible = "seeed,reterminal-e1002", "espressif,esp32s3";
+
+	chosen {
+		bootargs = "earlycon=esp32s3uart,mmio32,0x60000000,115200n8,40000000 console=ttyS0,115200n8 debug rw root=mtd:rootfs no_hash_pointers";
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x3d800000 0x00800000>; /* 8MB Octal PSRAM */
+	};
+
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		/* ESP-IDF network adapter shared memory */
+		shmem: shmem@3df00000 {
+			reg = <0x3df00000 0x00100000>;
+			no-map;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		led_green: led-green {
+			label = "reterminal:green:status";
+			gpios = <&gpio0 6 GPIO_ACTIVE_LOW>;
+			default-state = "on";
+		};
+
+		buzzer: buzzer {
+			label = "reterminal:buzzer";
+			gpios = <&gpio0 45 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		autorepeat;
+
+		button_left: button-left {
+			label = "Left Button";
+			linux,code = <105>; /* KEY_LEFT */
+			gpios = <&gpio0 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			debounce-interval = <50>;
+		};
+
+		button_middle: button-mid {
+			label = "Middle Button";
+			linux,code = <28>; /* KEY_ENTER */
+			gpios = <&gpio0 4 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			debounce-interval = <50>;
+		};
+
+		button_right: button-right {
+			label = "Right Button";
+			linux,code = <106>; /* KEY_RIGHT */
+			gpios = <&gpio0 5 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			debounce-interval = <50>;
+		};
+	};
+
+	i2c0: i2c0 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "i2c-gpio";
+		sda-gpios = <&gpio0 19 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&gpio0 20 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <2>; /* 250 kHz */
+		pinctrl-0 = <&i2c0_pins>;
+		pinctrl-names = "default";
+
+		/* Sensirion SHT40 Temperature and Humidity Sensor */
+		sht40: sensor@44 {
+			compatible = "sensirion,sht4x";
+			reg = <0x44>;
+		};
+
+		/* NXP/Citizen PCF8563 Real-Time Clock */
+		rtc: rtc@51 {
+			compatible = "nxp,pcf8563";
+			reg = <0x51>;
+		};
+	};
+
+	i2c1: i2c1 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "i2c-gpio";
+		sda-gpios = <&gpio0 39 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&gpio0 40 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <2>;
+		pinctrl-0 = <&i2c1_pins>;
+		pinctrl-names = "default";
+		status = "okay";
+	};
+};
+
+&soc {
+	/* 32MB Flash on SPI0/SPI1 mapped into virtual memory space */
+	flash@42000000 {
+		reg = <0x42000000 0x02000000>; /* 32MB */
+	};
+};
+
+&iomux {
+	status = "ok";
+
+	uart0_pins: uart0_pins {
+		pinctrl-single,pins = <
+			PIN(43) FUN0_20MA              /* U0TXD */
+			PIN(44) FUN0_20MA_IE_WPU>;     /* U0RXD */
+	};
+
+	i2c0_pins: i2c0_pins {
+		pinctrl-single,pins = <
+			PIN(19) FUN0_20MA_IE_WPU       /* I2C0 SDA */
+			PIN(20) FUN0_20MA_IE_WPU>;     /* I2C0 SCL */
+	};
+
+	i2c1_pins: i2c1_pins {
+		pinctrl-single,pins = <
+			PIN(39) FUN0_20MA_IE_WPU       /* I2C1 SDA */
+			PIN(40) FUN0_20MA_IE_WPU>;     /* I2C1 SCL */
+	};
+
+	spi2_epaper_pins: spi2_epaper_pins {
+		pinctrl-single,pins = <
+			PIN(7)  (FUN_SEL(4) | FUN_DRV_40MA)    /* SCK */
+			PIN(9)  (FUN_SEL(4) | FUN_DRV_40MA)    /* MOSI */
+			PIN(10) (FUN_SEL(4) | FUN_DRV_20MA)    /* CS0 */
+			PIN(11) FUN0_20MA                      /* DC */
+			PIN(12) FUN0_20MA                      /* RST */
+			PIN(13) FUN0_20MA_IE_WPU>;             /* BUSY */
+	};
+
+	spi3_sd_pins: spi3_sd_pins {
+		pinctrl-single,pins = <
+			PIN(14) (FUN_SEL(4) | FUN_DRV_40MA)    /* SD CLK */
+			PIN(15) (FUN_SEL(4) | FUN_DRV_40MA)    /* SD CMD (MOSI) */
+			PIN(16) (FUN_SEL(4) | FUN0_20MA_IE_WPU)/* SD DAT0 (MISO) */
+			PIN(21) (FUN_SEL(4) | FUN_DRV_20MA)>;  /* SD CS */
+	};
+};
+
+&gpio0 {
+	status = "ok";
+};
+
+&uart0 {
+	pinctrl-0 = <&uart0_pins>;
+	pinctrl-names = "default";
+	status = "ok";
+};
+
+/* SPI2: Connected to 7.3" 800x480 Spectra 6 ePaper Display */
+&spi2 {
+	pinctrl-0 = <&spi2_epaper_pins>;
+	pinctrl-names = "default";
+	status = "ok";
+
+	epaper: display@0 {
+		compatible = "seeed,ed2208-epaper", "fsl,spi-display";
+		reg = <0>;
+		spi-max-frequency = <20000000>;
+		dc-gpios = <&gpio0 11 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpio0 12 GPIO_ACTIVE_LOW>;
+		busy-gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+		width = <800>;
+		height = <480>;
+		bpp = <4>;
+	};
+};
+
+/* SPI3: Connected to MicroSD Slot */
+&spi3 {
+	pinctrl-0 = <&spi3_sd_pins>;
+	pinctrl-names = "default";
+	status = "ok";
+
+	sdcard: mmc_spi@0 {
+		compatible = "mmc-spi-slot";
+		reg = <0>;
+		spi-max-frequency = <20000000>;
+		voltage-ranges = <3200 3400>;
+	};
+};
+
+&acm {
+	status = "ok";
+};
+
+&ipc {
+	wifi@1 {
+		compatible = "esp,esp32-wifi-shmem";
+	};
+};

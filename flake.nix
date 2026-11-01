@@ -23,8 +23,12 @@
           sixos-src = inputs.sixos-src;
           linux-src = inputs.linux-esp32-s3-src;
         };
+      nixosModules.reterminal-e1002 = ./reterminal-e1002/module.nix;
+      nixosModules.default = ./reterminal-e1002/module.nix;
+      sixosModules.reterminal-e1002 = ./reterminal-e1002/module.nix;
+      sixosModules.default = ./reterminal-e1002/module.nix;
     }
-    // flake-utils.lib.eachDefaultSystem (
+    // flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ] (
       system:
       let
         pkgs = import nixpkgs { inherit system; };
@@ -48,18 +52,26 @@
           }
         );
         portingKit = pkgs.runCommand "reterminal-e1002-porting-kit" { } ''
-          mkdir -p $out/sources $out/docs $out/board
+          mkdir -p $out/sources $out/docs $out/board $out/services
           ln -s ${sources.linux} $out/sources/linux-esp32-s3
           ln -s ${sources.sixos} $out/sources/sixos
           cp ${manifest} $out/port-status.json
           cp ${./README.md} $out/README.md
           cp ${./docs/porting.md} $out/docs/porting.md
           cp ${./reterminal-e1002/partitions_32mb.csv} $out/board/partitions_32mb.PROPOSED.csv
+          cp ${./reterminal-e1002/esp32s3-reterminal-e1002.dts} $out/board/esp32s3-reterminal-e1002.dts
+          cp ${./reterminal-e1002/README.md} $out/board/README.md
+          cp ${./reterminal-e1002/module.nix} $out/board/module.nix
+          cp -r ${./reterminal-e1002/services}/. $out/services/
         '';
-        sixosInit = import ./nix/sixos-init.nix {
-          inherit pkgs;
-          sixos-src = sources.sixos;
-        };
+        sixosInit =
+          if pkgs.stdenv.hostPlatform.isLinux then
+            import ./nix/sixos-init.nix {
+              inherit pkgs;
+              sixos-src = sources.sixos;
+            }
+          else
+            null;
         xipCramfs = import ./nix/xip-cramfs.nix { inherit pkgs; };
         espEmuAssets = {
           x86_64-linux = {
@@ -75,21 +87,25 @@
             hash = "sha256-qwJSS9KGzoRXdjlzHQ5I1iPOm+ZeRdnhJG3SIMFHYQI=";
           };
         };
-        espEmu = pkgs.stdenvNoCC.mkDerivation {
-          pname = "esp-emu";
-          version = "0.51.0";
-          src = pkgs.fetchurl {
-            url = "https://github.com/espressif/esp-emulator/releases/download/v0.51.0/${espEmuAssets.${system}.file}";
-            inherit (espEmuAssets.${system}) hash;
-          };
-          dontUnpack = true;
-          nativeBuildInputs = [ pkgs.gnutar ];
-          installPhase = ''
-            mkdir -p $out/bin
-            tar -xzf $src --strip-components=1 -C $out/bin
-            chmod 755 $out/bin/esp-emu
-          '';
-        };
+        espEmu =
+          if espEmuAssets ? ${system} then
+            pkgs.stdenvNoCC.mkDerivation {
+              pname = "esp-emu";
+              version = "0.51.0";
+              src = pkgs.fetchurl {
+                url = "https://github.com/espressif/esp-emulator/releases/download/v0.51.0/${espEmuAssets.${system}.file}";
+                inherit (espEmuAssets.${system}) hash;
+              };
+              dontUnpack = true;
+              nativeBuildInputs = [ pkgs.gnutar ];
+              installPhase = ''
+                mkdir -p $out/bin
+                tar -xzf $src --strip-components=1 -C $out/bin
+                chmod 755 $out/bin/esp-emu
+              '';
+            }
+          else
+            null;
         skarnetSources =
           pkgs.runCommand "skarnet-pinned-sources"
             {
@@ -153,33 +169,134 @@
           upstream-reference = upstreamReference;
           skarnet-sources = skarnetSources;
           cramfs-xip = xipCramfs;
+        }
+        // pkgs.lib.optionalAttrs (sixosInit != null) {
           sixos-init = sixosInit;
+        }
+        // pkgs.lib.optionalAttrs (espEmu != null) {
           esp-emu = espEmu;
         };
-        apps.build-firmware = flake-utils.lib.mkApp {
-          drv = pkgs.writeShellApplication {
-            name = "build-reterminal-e1002-firmware";
-            runtimeInputs = [
-              pkgs.nix
-              pkgs.podman
-              pkgs.git
-              pkgs.python3
-            ];
-            text = ''export NOMMU_REPO=${./.}; exec ${./tools/build-firmware.sh} "''${1:-.work}"'';
-          };
+        apps = {
+          build-firmware =
+            (flake-utils.lib.mkApp {
+              drv = pkgs.writeShellApplication {
+                name = "build-reterminal-e1002-firmware";
+                runtimeInputs = [
+                  pkgs.nix
+                  pkgs.podman
+                  pkgs.git
+                  pkgs.python3
+                ];
+                text = ''export NOMMU_REPO=${./.}; exec ${./tools/build-firmware.sh} "''${1:-.work}"'';
+              };
+            })
+            // {
+              meta = {
+                description = "Build pinned SDK, target Skarnet packages, sixos site, and flash image";
+              };
+            };
+          test-sixos =
+            (flake-utils.lib.mkApp {
+              drv = pkgs.writeShellApplication {
+                name = "test-reterminal-sixos";
+                runtimeInputs = [
+                  pkgs.bash
+                  pkgs.python3
+                  pkgs.coreutils
+                ];
+                text = ''export NOMMU_REPO="''${NOMMU_REPO:-$PWD}"; exec ${./tools/test-sixos.sh} "''${1:?Usage: nix run .#test-sixos -- IMAGE.bin [LOG]}" "''${2:-.work/sixos-boot.log}"'';
+              };
+            })
+            // {
+              meta = {
+                description = "Boot and test sixos init, service bundle, and login prompt under esp32sim";
+              };
+            };
+          flash-firmware =
+            (flake-utils.lib.mkApp {
+              drv = pkgs.writeShellApplication {
+                name = "flash-reterminal-firmware";
+                runtimeInputs = [
+                  pkgs.esptool
+                  pkgs.coreutils
+                ];
+                text = ''
+                  port="''${1:?Usage: nix run .#flash-firmware -- PORT [IMAGE.bin] (e.g. /dev/ttyACM0)}"
+                  image="''${2:-.work/firmware/reterminal-e1002-six-init-experimental.bin}"
+                  if [[ ! -f "$image" ]]; then
+                    echo "Image not found: $image" >&2
+                    exit 1
+                  fi
+                  bytes=$(stat -c%s "$image" 2>/dev/null || wc -c < "$image")
+                  flash_size="16MB"
+                  if (( bytes > 16777216 )); then
+                    flash_size="32MB"
+                  fi
+                  echo "Flashing $image ($flash_size) to $port at 460800 baud..."
+                  exec esptool --chip esp32s3 -p "$port" -b 460800 write_flash \
+                    --flash-mode dio --flash-size "$flash_size" --flash-freq 80m \
+                    0x0 "$image"
+                '';
+              };
+            })
+            // {
+              meta = {
+                description = "Flash merged ESP32-S3 firmware image to board serial port using esptool";
+              };
+            };
+        }
+        // pkgs.lib.optionalAttrs (espEmu != null) {
+          test-emulator =
+            (flake-utils.lib.mkApp {
+              drv = pkgs.writeShellApplication {
+                name = "test-reterminal-emulator";
+                runtimeInputs = [
+                  espEmu
+                  pkgs.coreutils
+                  pkgs.gnugrep
+                ];
+                text = ''exec ${./tools/test-emulator.sh} "''${1:?Usage: nix run .#test-emulator -- IMAGE.bin [LOG]}" "''${2:-.work/esp-emu.log}"'';
+              };
+            })
+            // {
+              meta = {
+                description = "Boot merged image in Espressif esp-emu (stops before Linux network adapter)";
+              };
+            };
         };
-        apps.test-emulator = flake-utils.lib.mkApp {
-          drv = pkgs.writeShellApplication {
-            name = "test-reterminal-emulator";
-            runtimeInputs = [
-              espEmu
-              pkgs.coreutils
-              pkgs.gnugrep
-            ];
-            text = ''exec ${./tools/test-emulator.sh} "''${1:?Usage: nix run .#test-emulator -- IMAGE.bin [LOG]}" "''${2:-.work/esp-emu.log}"'';
-          };
+        checks = {
+          layout =
+            pkgs.runCommand "reterminal-layout-check"
+              {
+                nativeBuildInputs = [ pkgs.python3 ];
+              }
+              ''
+                python3 ${./tools/check-layout.py} ${./reterminal-e1002/partitions_32mb.csv} --flash-bytes 33554432
+                python3 ${./tools/test-layout.py} ${./tools/check-layout.py}
+                touch $out
+              '';
+          syntax =
+            pkgs.runCommand "reterminal-scripts-syntax-check"
+              {
+                nativeBuildInputs = [
+                  pkgs.bash
+                  pkgs.dash
+                  pkgs.python3
+                ];
+              }
+              ''
+                python3 -c "import ast, glob; [ast.parse(open(f, 'rb').read(), f) for f in glob.glob('${./tools}/*.py')]"
+                for script in ${./tools}/*.sh ${./firmware}/* ${./reterminal-e1002/services}/*/run; do
+                  if [[ -f "$script" && "$script" != *.py && "$script" != *__pycache__* ]]; then
+                    bash -n "$script" 2>/dev/null || dash -n "$script"
+                  fi
+                done
+                touch $out
+              '';
+        }
+        // pkgs.lib.optionalAttrs (sixosInit != null) {
+          sixos-init = sixosInit;
         };
-        checks.sixos-init = sixosInit;
         formatter = pkgs.writeShellApplication {
           name = "format-nix";
           runtimeInputs = [
@@ -194,16 +311,6 @@
             done < <(git ls-files -z --cached --others --exclude-standard -- '*.nix')
           '';
         };
-        checks.layout =
-          pkgs.runCommand "reterminal-layout-check"
-            {
-              nativeBuildInputs = [ pkgs.python3 ];
-            }
-            ''
-              python3 ${./tools/check-layout.py} ${./reterminal-e1002/partitions_32mb.csv} --flash-bytes 33554432
-              python3 ${./tools/test-layout.py} ${./tools/check-layout.py}
-              touch $out
-            '';
         devShells.default = pkgs.mkShell {
           packages = [
             pkgs.python3
@@ -216,8 +323,8 @@
             xipCramfs
             pkgs.cpio
             pkgs.fakeroot
-            espEmu
-          ];
+          ]
+          ++ pkgs.lib.optional (espEmu != null) espEmu;
           LINUX_ESP32_S3_SRC = sources.linux;
           SIXOS_SRC = sources.sixos;
           SIXOS_INIT = sixosInit;

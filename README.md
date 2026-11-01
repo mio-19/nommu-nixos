@@ -11,6 +11,8 @@ nix flake check                  # partition tests and sixos init archive
 nix fmt                          # format Nix sources
 nix develop                      # host tools and source paths
 nix run .#build-firmware -- .work # SDK, target packages, sixos site, image
+nix run .#test-sixos -- .work/firmware/reterminal-e1002-six-init-experimental.bin # emulator boot test
+nix run .#flash-firmware -- /dev/ttyACM0 # flash image to device via esptool
 ```
 
 The full build uses rootless Podman for the pinned upstream SDK bootstrap. It cross-compiles skalibs, execline, s6, s6-rc, s6-linux-init and s6-portable-utils, snapshots those build outputs into the Nix store, then builds the configuration through `lib.mkSixosSite`. The s6-rc compiler runs natively under Nix and uses the target configuration headers to embed target executable paths.
@@ -22,6 +24,10 @@ The default bundle contains filesystem setup, UART login, and clock restore/save
 To repeat the end-to-end test with `esp32sim` 0.3.0 and an ESP32-S3 ROM ELF:
 
 ```sh
+# Run via nix flake app or direct script:
+nix run .#test-sixos -- .work/firmware/reterminal-e1002-six-init-experimental.bin
+
+# Or set custom emulator / ROM paths:
 ESP32SIM=/path/to/esp32sim ESP32SIM_ROM=/path/to/esp32s3_rev0_rom.elf \
   tools/test-sixos.sh .work/firmware/reterminal-e1002-six-init-experimental.bin
 ```
@@ -30,6 +36,6 @@ The test uses a virtual AP and a BLE provisioning stub specific to the pinned ne
 
 The older `nix run .#test-emulator` path uses Espressif's `esp-emu`; it stalls before Linux for this image and does not validate sixos.
 
-The firmware remains untested on E1002 hardware. It does not yet drive its ePaper panel, sensors, buttons, battery management or sleep mode. NOMMU does not isolate process memory. See [porting notes](docs/porting.md) for platform adaptations and remaining board work.
+The porting kit (`nix build`) includes the reTerminal E1002 Device Tree Source (`reterminal-e1002/esp32s3-reterminal-e1002.dts`), proposed 32MB partition table (`reterminal-e1002/partitions_32mb.csv`), peripheral s6 services for buttons, ePaper display and sensors (`reterminal-e1002/services/`), and hardware documentation. NOMMU does not isolate process memory. See [porting notes](docs/porting.md) and [reTerminal E1002 docs](reterminal-e1002/README.md) for platform adaptations and remaining board work.
 
 Sources: [Linux-on-esp32-S3](https://github.com/paulneja/Linux-on-esp32-S3), [sixos](https://codeberg.org/amjoseph/sixos), [reTerminal E1002 schematic](https://files.seeedstudio.com/wiki/reterminal_e10xx/res/202004321_reTerminal_E1002_V1_2_SCH_251120.pdf), [Seeed E1002 guide](https://wiki.seeedstudio.com/getting_started_with_reterminal_e1002/).

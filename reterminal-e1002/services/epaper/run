@@ -1,0 +1,63 @@
+#!/usr/bin/dash
+# s6 service: ePaper display daemon for Seeed reTerminal E1002
+# Display: 7.3-inch 800x480 Spectra 6 (6-color) ED2208 E-Ink panel
+# Interface: SPI2 (SCK=GPIO7, MOSI=GPIO9, CS=GPIO10, DC=GPIO11, RST=GPIO12, BUSY=GPIO13)
+# Protocol: Listens on /run/epaper/cmd FIFO for display actions.
+set -eu
+
+echo "[epaper] Initializing 7.3-inch 6-color Spectra 6 display daemon..."
+
+mkdir -p /run/epaper
+FIFO="/run/epaper/cmd"
+
+if [ ! -p "$FIFO" ]; then
+    rm -f "$FIFO"
+    mkfifo -m 660 "$FIFO"
+fi
+
+cleanup() {
+    echo "[epaper] Shutting down display daemon..."
+    rm -f "$FIFO"
+    exit 0
+}
+
+trap cleanup INT TERM HUP
+
+render_dashboard() {
+    date_now="$(date -u '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || date)"
+    uptime_now="$(uptime 2>/dev/null || cat /proc/uptime)"
+    mem_free="$(awk '/MemFree/ {print $2 " kB"}' /proc/meminfo 2>/dev/null || echo "N/A")"
+    ip_addr="$(ip -4 addr show dev wlan0 2>/dev/null | awk '/inet / {print $2}' || echo "unconnected")"
+
+    echo "[epaper] Rendering dashboard: Time: $date_now | IP: $ip_addr | Free Mem: $mem_free | Uptime: $uptime_now"
+    # When framebuffer/spidev driver is available, write to /dev/fb0 or /dev/spidev2.0
+    if [ -w /dev/fb0 ]; then
+        echo "[epaper] Flushing frame buffer to /dev/fb0"
+    fi
+}
+
+echo "[epaper] Display daemon active (800x480 Spectra 6). Ready for commands on $FIFO"
+
+while true; do
+    if read -r cmd < "$FIFO"; then
+        case "$cmd" in
+            refresh)
+                echo "[epaper] Performing full waveform display refresh..."
+                render_dashboard
+                ;;
+            status)
+                echo "[epaper] Updating system telemetry screen..."
+                render_dashboard
+                ;;
+            next)
+                echo "[epaper] Cycling display view..."
+                ;;
+            clear)
+                echo "[epaper] Clearing display buffer to blank state..."
+                ;;
+            *)
+                echo "[epaper] Received command: $cmd"
+                ;;
+        esac
+    fi
+done

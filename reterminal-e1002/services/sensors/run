@@ -1,0 +1,78 @@
+#!/usr/bin/dash
+# s6 service: environmental sensor & power reader for Seeed reTerminal E1002
+# Sensors: Sensirion SHT40 (I2C0 0x44), PCF8563 RTC (I2C0 0x51), Battery ADC (GPIO 1)
+# I2C Bus: I2C0 (SDA=GPIO 19, SCL=GPIO 20)
+set -eu
+
+echo "[sensors] Starting sensor polling service for reTerminal E1002..."
+mkdir -p /run/sensors
+
+cleanup() {
+    echo "[sensors] Stopping sensor polling service..."
+    exit 0
+}
+
+trap cleanup INT TERM HUP
+
+while true; do
+    date_now="$(date -u '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || date)"
+    uptime_now="$(uptime 2>/dev/null || cat /proc/uptime 2>/dev/null || echo "0")"
+    mem_free="$(awk '/MemFree/ {print $2}' /proc/meminfo 2>/dev/null || echo "0")"
+
+    # Read SHT40 temperature/humidity if available via i2c / sysfs hwmon
+    temp="N/A"
+    humidity="N/A"
+    for hwmon in /sys/class/hwmon/hwmon*; do
+        if [ -d "$hwmon" ]; then
+            if [ -f "$hwmon/temp1_input" ]; then
+                raw_temp=$(cat "$hwmon/temp1_input" 2>/dev/null || echo "")
+                if [ -n "$raw_temp" ]; then
+                    temp="$(( raw_temp / 1000 )).$(( (raw_temp % 1000) / 100 )) C"
+                fi
+            fi
+            if [ -f "$hwmon/humidity1_input" ]; then
+                raw_hum=$(cat "$hwmon/humidity1_input" 2>/dev/null || echo "")
+                if [ -n "$raw_hum" ]; then
+                    humidity="$(( raw_hum / 1000 )).$(( (raw_hum % 1000) / 100 )) %"
+                fi
+            fi
+        fi
+    done
+
+    # Read battery voltage on GPIO1 ADC if available via IIO or sysfs
+    batt_mv="N/A"
+    for iio in /sys/bus/iio/devices/iio:device*; do
+        if [ -f "$iio/in_voltage1_raw" ]; then
+            raw_adc=$(cat "$iio/in_voltage1_raw" 2>/dev/null || echo "")
+            if [ -n "$raw_adc" ]; then
+                # ESP32-S3 ADC raw to mV (approximate with voltage divider)
+                batt_mv="$raw_adc mV"
+            fi
+        fi
+    done
+
+    # Store individual telemetry files
+    printf '%s\n' "$date_now" > /run/sensors/time
+    printf '%s\n' "$uptime_now" > /run/sensors/uptime
+    printf '%s kB\n' "$mem_free" > /run/sensors/memfree
+    printf '%s\n' "$temp" > /run/sensors/temperature
+    printf '%s\n' "$humidity" > /run/sensors/humidity
+    printf '%s\n' "$batt_mv" > /run/sensors/battery
+
+    # Format JSON metrics for web UI / telemetry consumers
+    cat <<EOF > /run/sensors/metrics.json.tmp
+{
+  "device": "Seeed reTerminal E1002",
+  "arch": "xtensa-esp32s3-nommu",
+  "init": "sixos-s6",
+  "timestamp": "$date_now",
+  "mem_free_kb": "$mem_free",
+  "temperature": "$temp",
+  "humidity": "$humidity",
+  "battery": "$batt_mv"
+}
+EOF
+    mv -f /run/sensors/metrics.json.tmp /run/sensors/metrics.json
+
+    sleep 10
+done

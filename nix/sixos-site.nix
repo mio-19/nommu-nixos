@@ -177,6 +177,20 @@ let
           hashed-password = "x";
         };
         extra-configuration-links."etc/hostname" = pkgs.writeText "hostname" "reterminal-e1002\n";
+        extra-configuration-links."etc/os-release" = pkgs.writeText "os-release" ''
+          NAME="sixos"
+          ID=sixos
+          ID_LIKE=nixos
+          VERSION="reTerminal E1002 NOMMU"
+          PRETTY_NAME="sixos on ESP32-S3 (NOMMU)"
+          HOME_URL="https://codeberg.org/amjoseph/sixos"
+          VARIANT="Seeed reTerminal E1002"
+          VARIANT_ID=reterminal-e1002
+        '';
+        extra-configuration-links."etc/issue" = pkgs.writeText "issue" ''
+          Welcome to sixos on Seeed reTerminal E1002 (\l)
+
+        '';
         # The board has no validated RTC. Save the clock at service shutdown
         # instead of running an additional periodic process on 8 MiB PSRAM.
         services = prev.services // {

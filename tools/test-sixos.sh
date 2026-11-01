@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
 # Boot the complete site configuration, not just the Linux kernel banner.
 set -euo pipefail
-repo=$(cd "$(dirname "$0")/.." && pwd)
+repo=${NOMMU_REPO:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null || pwd)}
 image=${1:?Usage: test-sixos.sh IMAGE.bin [LOG]}
 log=${2:-$repo/.work/sixos-boot.log}
 emulator=${ESP32SIM:-$repo/.work/esp32sim/esp32sim}
 rom=${ESP32SIM_ROM:-$repo/.work/esp32sim-roms/esp32s3_rev0_rom.elf}
-test -x "$emulator"
-test -f "$rom"
+test -x "$emulator" || {
+  echo "Missing esp32sim emulator at '$emulator'. Set ESP32SIM=/path/to/esp32sim or build to .work/esp32sim/esp32sim" >&2
+  exit 1
+}
+test -f "$rom" || {
+  echo "Missing ESP32-S3 ROM ELF at '$rom'. Set ESP32SIM_ROM=/path/to/rom.elf or place in .work/esp32sim-roms/" >&2
+  exit 1
+}
 mkdir -p "$(dirname "$log")"
+flash_bytes=$(stat -c%s "$image" 2>/dev/null || wc -c < "$image")
+default_flash_mb=$(( flash_bytes / 1024 / 1024 ))
+flash_mb=${FLASH_MB:-$(( default_flash_mb > 0 ? default_flash_mb : 16 ))}
 options=(--max-seconds 20)
 if [[ ${SIXOS_TEST_LIFECYCLE:-0} == 1 ]]; then
   options=(--max-seconds 40 --script "$repo/tools/sixos-lifecycle.script")
@@ -16,7 +25,7 @@ fi
 # The stub is specific to nimble_port_init in the pinned network adapter.
 # It bypasses BLE provisioning only; Linux and sixos execute unchanged.
 timeout "${SIXOS_TEST_TIMEOUT:-180s}" "$emulator" --chip s3 --boot rom --rom "$rom" \
-  --flash-image "$image" --flash-mb 16 --psram-mb 8 --board none \
+  --flash-image "$image" --flash-mb "$flash_mb" --psram-mb 8 --board none \
   --console uart0 "${options[@]}" --no-reboot --stub 0x4200ed50=0xffffffff \
   --wifi 'ssid=esp32sim,chan=6,psk=esp32sim-password' --net none > "$log" 2>&1
 python3 - "$log" <<'PY'
