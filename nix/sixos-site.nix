@@ -88,6 +88,8 @@ let
         mkdir -p $out
         cp -a root/{bin,sbin,usr,lib} $out/
         chmod -R u+w $out
+        ln -sf ../usr/bin/dash $out/bin/sh
+        ln -sf ../usr/bin/dash $out/bin/dash
         ln -s ../usr/bin/env $out/bin/env
         ln -s busybox $out/bin/reboot
         ln -s ../usr/sbin/nologin $out/bin/nologin
@@ -101,7 +103,7 @@ let
   # Builders execute on the host; runtime dependencies are Xtensa packages.
   # Tools unsupported by this flash appliance are never shipped (see below).
   targetPkgs = pkgs // {
-    runtimeShell = "/usr/bin/dash";
+    runtimeShell = "/bin/sh";
     hostPlatform = {
       config = "xtensa-esp32s3-linux-uclibcfdpic";
     };
@@ -195,6 +197,7 @@ let
         '';
         extra-configuration-links."etc/shells" = pkgs.writeText "shells" ''
           /bin/sh
+          /bin/dash
           /usr/bin/dash
           /bin/ash
           /usr/bin/user-shell
@@ -230,7 +233,7 @@ let
           hwclock-fake =
             _:
             final.six.mkOneshot {
-              up = "/usr/bin/dash ${./../firmware/clock-restore}";
+              up = "/bin/sh ${./../firmware/clock-restore}";
               passthru = {
                 before = [ final.targets.global.hwclock ];
                 after = [ final.targets.early-setup ];
@@ -240,7 +243,7 @@ let
             _:
             final.six.mkOneshot {
               up = "/bin/true";
-              down = "/usr/bin/dash ${./../firmware/clock-save}";
+              down = "/bin/sh ${./../firmware/clock-save}";
               passthru.after = [
                 final.targets.early-setup
                 final.targets.global.hwclock
@@ -251,7 +254,7 @@ let
           default = final.six.mkBundle { };
           global.hwclock = final.six.mkBundle { };
           early-setup = final.six.mkOneshot {
-            up = "/usr/bin/dash ${./../firmware/early-setup}";
+            up = "/bin/sh ${./../firmware/early-setup}";
           };
           console = final.six.mkService {
             type = "longrun";

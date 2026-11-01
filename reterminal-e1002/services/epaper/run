@@ -1,4 +1,4 @@
-#!/usr/bin/dash
+#!/bin/sh
 # s6 service: ePaper display daemon for Seeed reTerminal E1002
 # Display: 7.3-inch 800x480 Spectra 6 (6-color) ED2208 E-Ink panel
 # Interface: SPI2 (SCK=GPIO7, MOSI=GPIO9, CS=GPIO10, DC=GPIO11, RST=GPIO12, BUSY=GPIO13)

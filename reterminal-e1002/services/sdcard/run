@@ -1,4 +1,4 @@
-#!/usr/bin/dash
+#!/bin/sh
 # s6 service: MicroSD card auto-mounter for Seeed reTerminal E1002
 # Hardware: MicroSD slot on SPI3 (MOSI=GPIO14, MISO=GPIO15, SCK=GPIO16, CS=GPIO46/expansion)
 # Function parity with official Seeed firmware:

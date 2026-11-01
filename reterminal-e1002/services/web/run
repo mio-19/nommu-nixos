@@ -1,4 +1,4 @@
-#!/usr/bin/dash
+#!/bin/sh
 # s6 service: web telemetry and control dashboard for Seeed reTerminal E1002
 # Function parity with official Seeed firmware (SenseCraft HMI / Seeedash / TRMNL):
 #   - Embedded HTTP server on port 8080
@@ -73,7 +73,7 @@ HTML
 
 # Generate CGI endpoints
 cat <<'SH' > "$CGI_DIR/api"
-#!/usr/bin/dash
+#!/bin/sh
 printf "Content-Type: application/json\r\n\r\n"
 if [ -f /run/sensors/metrics.json ]; then
   cat /run/sensors/metrics.json
@@ -84,7 +84,7 @@ SH
 chmod 755 "$CGI_DIR/api"
 
 cat <<'SH' > "$CGI_DIR/refresh"
-#!/usr/bin/dash
+#!/bin/sh
 printf "Content-Type: application/json\r\n\r\n"
 if [ -e /run/epaper/cmd ]; then
   printf "refresh\n" > /run/epaper/cmd
@@ -94,7 +94,7 @@ SH
 chmod 755 "$CGI_DIR/refresh"
 
 cat <<'SH' > "$CGI_DIR/clear"
-#!/usr/bin/dash
+#!/bin/sh
 printf "Content-Type: application/json\r\n\r\n"
 if [ -e /run/epaper/cmd ]; then
   printf "clear\n" > /run/epaper/cmd
@@ -104,7 +104,7 @@ SH
 chmod 755 "$CGI_DIR/clear"
 
 cat <<'SH' > "$CGI_DIR/beep"
-#!/usr/bin/dash
+#!/bin/sh
 printf "Content-Type: application/json\r\n\r\n"
 if [ -f /sys/class/gpio/gpio45/value ]; then
   echo 1 > /sys/class/gpio/gpio45/value 2>/dev/null || true

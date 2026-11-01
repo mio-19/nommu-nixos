@@ -1,4 +1,4 @@
-#!/usr/bin/dash
+#!/bin/sh
 # s6 service: environmental sensor & power reader for Seeed reTerminal E1002
 # Hardware: Sensirion SHT40 (I2C0 0x44), PCF8563 RTC (I2C0 0x51), Battery ADC (GPIO 1)
 # I2C Bus: I2C0 (SDA=GPIO 19, SCL=GPIO 20)

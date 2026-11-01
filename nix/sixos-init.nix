@@ -9,7 +9,7 @@ let
     outPath = "";
   };
   generated = pkgs.callPackage "${sixos-src}/mkConfiguration/s6-linux-init.nix" {
-    runtimeShell = "/usr/bin/dash";
+    runtimeShell = "/bin/sh";
     pkgs = {
       pkgsStatic.busybox = targetBusybox;
       busybox = targetBusybox;
@@ -42,7 +42,7 @@ pkgs.runCommand "sixos-esp32s3-init-template"
     mkdir -p tree $out
     cd tree
     cat > $out/rc.init <<'RCINIT'
-    #!/usr/bin/dash
+    #!/bin/sh
     set -eu
     exec /nix/var/nix/profiles/system/bin/activate
     RCINIT

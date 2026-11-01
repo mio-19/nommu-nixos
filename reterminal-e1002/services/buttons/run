@@ -1,4 +1,4 @@
-#!/usr/bin/dash
+#!/bin/sh
 # s6 service: button and indicator supervisor for Seeed reTerminal E1002
 # Hardware: Left (GPIO 3), Middle (GPIO 4), Right (GPIO 5), LED (GPIO 6), Buzzer (GPIO 45)
 # Function parity with official Seeed firmware:

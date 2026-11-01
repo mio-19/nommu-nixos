@@ -15,7 +15,7 @@ Bring-up needed these target fixes, all applied by the build rather than by hand
 3. `s6-svscan` reserves about 260 KiB of stack for its default 1000-service/251-byte-name tables, overflowing the original 64 KiB NOMMU stack; it is wrapped with `-C 32 -L 48`. The Skarnet ELF stack reservation is now 32 KiB, reducing the contiguous allocations needed on 8 MiB PSRAM.
 4. The kernel rejects file-backed `mmap` with `ENODEV`, so skalibs' `cdb_init_fromfd` falls back to an anonymous mapping filled by `read()`.
 5. An infinite relative `tain` deadline does not fit in 32-bit `time_t`; `pthread_mutex_tailock` treated that `EOVERFLOW` as a failure and broke every `s6-svlisten`/ftrigr subscription, so it now takes the blocking lock instead.
-6. `s6-rc` executes oneshot `up` files as execline, so sixos invokes the board shell scripts through `/usr/bin/dash`.
+6. `s6-rc` executes oneshot `up` files as execline, so sixos invokes the board shell scripts through `/bin/sh` (which symlinks to `dash`).
 7. Runtime helpers `s6-ftrigrd`, `s6-svlisten`, `s6-svlisten1`, `s6-svwait`, and `s6-sudoc` are installed; without them `s6-rc-init` and oneshot activation fail with `ENOENT`.
 
 The old shutdown-daemon restart loop was caused by the repacked CPIO containing regular files in place of FIFOs. `tools/init-cpio.py` now clears privileged mode bits only during sandbox extraction and restores their original archive metadata during repacking. The pipes remain real FIFOs, their types are checked, and normal sixos catch-all logging is enabled. Stage-one shutdown and runlevel scripts use the same system profile as activation.

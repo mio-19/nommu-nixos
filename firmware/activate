@@ -1,4 +1,4 @@
-#!/usr/bin/dash
+#!/bin/sh
 set -eu
 system=/nix/var/nix/profiles/system
 export PATH="/run/current-system/bin:$system/bin:$system/sw/bin:$system/sw/sbin:$system/sw/usr/bin:$system/sw/usr/sbin"
