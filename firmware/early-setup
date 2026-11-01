@@ -20,8 +20,10 @@ for name in passwd group; do
   chmod 644 "/etc/$name.sixos-new"
   mv -f "/etc/$name.sixos-new" "/etc/$name"
 done
-for name in hosts hostname os-release issue; do
-  ln -sf "/run/current-system/etc/$name" "/etc/$name"
+for name in hosts hostname os-release issue shells profile nsswitch.conf; do
+  if [ -e "/run/current-system/etc/$name" ]; then
+    ln -sf "/run/current-system/etc/$name" "/etc/$name"
+  fi
 done
 mkdir -p /home/root /etc/profile.d
 printf '%s\n' 'export PATH="/run/current-system/bin:/bin:/sbin:/usr/bin:/usr/sbin"' > /etc/profile.d/sixos.sh

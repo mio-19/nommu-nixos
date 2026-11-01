@@ -184,12 +184,45 @@ let
           VERSION="reTerminal E1002 NOMMU"
           PRETTY_NAME="sixos on ESP32-S3 (NOMMU)"
           HOME_URL="https://codeberg.org/amjoseph/sixos"
+          SUPPORT_URL="https://github.com/mio-19/nommu-nixos"
+          BUG_REPORT_URL="https://github.com/mio-19/nommu-nixos/issues"
           VARIANT="Seeed reTerminal E1002"
           VARIANT_ID=reterminal-e1002
         '';
         extra-configuration-links."etc/issue" = pkgs.writeText "issue" ''
           Welcome to sixos on Seeed reTerminal E1002 (\l)
 
+        '';
+        extra-configuration-links."etc/shells" = pkgs.writeText "shells" ''
+          /bin/sh
+          /usr/bin/dash
+          /bin/ash
+          /usr/bin/user-shell
+        '';
+        extra-configuration-links."etc/nsswitch.conf" = pkgs.writeText "nsswitch.conf" ''
+          passwd: files
+          group: files
+          shadow: files
+          hosts: files dns
+          networks: files
+          protocols: files
+          services: files
+          ethers: files
+          rpc: files
+        '';
+        extra-configuration-links."etc/profile" = pkgs.writeText "profile" ''
+          # System-wide profile for sixos / NixOS
+          export PATH="/run/current-system/bin:/bin:/sbin:/usr/bin:/usr/sbin"
+          export PAGER="less"
+          export EDITOR="vi"
+          if [ -d /etc/profile.d ]; then
+            for i in /etc/profile.d/*.sh; do
+              if [ -r "$i" ]; then
+                . "$i"
+              fi
+            done
+            unset i
+          fi
         '';
         # The board has no validated RTC. Save the clock at service shutdown
         # instead of running an additional periodic process on 8 MiB PSRAM.

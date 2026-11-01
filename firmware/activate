@@ -1,9 +1,10 @@
 #!/usr/bin/dash
 set -eu
 system=/nix/var/nix/profiles/system
-export PATH="$system/bin:/bin:/sbin:/usr/bin:/usr/sbin"
+export PATH="/run/current-system/bin:$system/bin:/bin:/sbin:/usr/bin:/usr/sbin"
 mkdir -p /run/lock /run/service
 ln -sfn "$system" /run/current-system
+ln -sfn "$system" /run/system
 ln -sfn /run/current-system/six/target /run/target
 if test -d /run/s6-rc; then
   # The active configuration cannot change on immutable cramfs. Reassert its
