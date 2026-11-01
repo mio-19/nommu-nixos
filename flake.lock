@@ -52,7 +52,24 @@
         "flake-utils": "flake-utils",
         "linux-esp32-s3-src": "linux-esp32-s3-src",
         "nixpkgs": "nixpkgs",
+        "sixos": "sixos",
         "sixos-src": "sixos-src"
+      }
+    },
+    "sixos": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1793226474,
+        "narHash": "sha256-jgibG7a/WarsgeoVTrzIx3UljnQfcQmOW0whqJqbFqI=",
+        "ref": "refs/heads/master",
+        "rev": "26c564b4b4c1957259b065636e71f4ef87da0295",
+        "revCount": 671,
+        "type": "git",
+        "url": "https://codeberg.org/amjoseph/sixos.git"
+      },
+      "original": {
+        "type": "git",
+        "url": "https://codeberg.org/amjoseph/sixos.git"
       }
     },
     "sixos-src": {

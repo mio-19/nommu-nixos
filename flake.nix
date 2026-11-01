@@ -7,6 +7,10 @@
       url = "github:paulneja/Linux-on-esp32-S3";
       flake = false;
     };
+    sixos = {
+      url = "git+https://codeberg.org/amjoseph/sixos.git";
+      flake = false;
+    };
     sixos-src = {
       url = "git+https://codeberg.org/amjoseph/sixos.git";
       flake = false;
@@ -16,11 +20,12 @@
     inputs@{ nixpkgs, flake-utils, ... }:
     {
       lib.sources.linux = inputs.linux-esp32-s3-src;
+      lib.sources.sixos = inputs.sixos;
       lib.mkSixosSite =
         { system, stack }:
         import ./nix/sixos-site.nix {
           inherit system stack nixpkgs;
-          sixos-src = inputs.sixos-src;
+          sixos-src = inputs.sixos;
           linux-src = inputs.linux-esp32-s3-src;
         };
       lib.sixosModules = {
@@ -36,7 +41,7 @@
         pkgs = import nixpkgs { inherit system; };
         sources = {
           linux = inputs.linux-esp32-s3-src;
-          sixos = inputs.sixos-src;
+          sixos = inputs.sixos;
         };
         manifest = pkgs.writeText "port-status.json" (
           builtins.toJSON {
