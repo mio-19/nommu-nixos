@@ -4,7 +4,7 @@ system=/nix/var/nix/profiles/system
 export PATH="/run/current-system/bin:$system/bin:$system/sw/bin:$system/sw/sbin:$system/sw/usr/bin:$system/sw/usr/sbin"
 # Match the mounts the upstream BusyBox init performed before rcS.
 mount -t proc proc /proc
-mkdir -p /dev/pts /dev/shm /tmp /run/lock/subsys
+mkdir -p /dev/pts /dev/shm /tmp /run/lock/subsys /run/log
 mount -t devpts -o gid=5,mode=620,ptmxmode=0666 devpts /dev/pts
 mount -t tmpfs -o mode=0777 tmpfs /dev/shm
 mount -t tmpfs -o mode=1777 tmpfs /tmp
@@ -15,6 +15,7 @@ ln -sf /proc/self/fd /dev/fd
 ln -sf /proc/self/fd/0 /dev/stdin
 ln -sf /proc/self/fd/1 /dev/stdout
 ln -sf /proc/self/fd/2 /dev/stderr
+ln -sf /proc/mounts /etc/mtab 2>/dev/null || true
 # BusyBox passwd also rewrites passwd when updating shadow. Seed writable
 # identity files atomically so first-login provisioning continues to work.
 for name in passwd group; do
@@ -27,6 +28,10 @@ for name in hosts hostname os-release issue shells profile nsswitch.conf; do
     ln -sf "/run/current-system/etc/$name" "/etc/$name"
   fi
 done
+if [ -d /run/current-system/etc/sixos ]; then
+  mkdir -p /etc/sixos
+  ln -sfn /run/current-system/etc/sixos/services /etc/sixos/services
+fi
 mkdir -p /home/root /etc/profile.d
 printf '%s\n' 'export PATH="/run/current-system/bin:/run/current-system/sw/bin:/run/current-system/sw/sbin:/run/current-system/sw/usr/bin:/run/current-system/sw/usr/sbin"' > /etc/profile.d/sixos.sh
 hostname -F /etc/hostname

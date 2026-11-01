@@ -183,16 +183,20 @@ let
           NAME="sixos"
           ID=sixos
           ID_LIKE=nixos
-          VERSION="reTerminal E1002 NOMMU"
-          PRETTY_NAME="sixos on ESP32-S3 (NOMMU)"
+          VERSION="26.11 (NOMMU)"
+          VERSION_ID="26.11"
+          VERSION_CODENAME="nommu"
+          PRETTY_NAME="sixos 26.11 on Seeed reTerminal E1002 (ESP32-S3 NOMMU)"
           HOME_URL="https://codeberg.org/amjoseph/sixos"
           SUPPORT_URL="https://github.com/mio-19/nommu-nixos"
           BUG_REPORT_URL="https://github.com/mio-19/nommu-nixos/issues"
+          DOCUMENTATION_URL="https://codeberg.org/amjoseph/sixos"
+          LOGO="sixos"
           VARIANT="Seeed reTerminal E1002"
           VARIANT_ID=reterminal-e1002
         '';
         extra-configuration-links."etc/issue" = pkgs.writeText "issue" ''
-          Welcome to sixos on Seeed reTerminal E1002 (\l)
+          <<< Welcome to sixos 26.11 on Seeed reTerminal E1002 (\m) - \l >>>
 
         '';
         extra-configuration-links."etc/shells" = pkgs.writeText "shells" ''
@@ -216,6 +220,11 @@ let
         extra-configuration-links."etc/profile" = pkgs.writeText "profile" ''
           # System-wide profile for sixos / NixOS
           export PATH="/run/current-system/bin:/run/current-system/sw/bin:/run/current-system/sw/sbin:/run/current-system/sw/usr/bin:/run/current-system/sw/usr/sbin"
+          export SHELL="/bin/sh"
+          export USER="root"
+          export LOGNAME="root"
+          export HOME="/home/root"
+          export TERM="''${TERM:-vt100}"
           export PAGER="less"
           export EDITOR="vi"
           if [ -d /etc/profile.d ]; then
@@ -298,6 +307,8 @@ let
         done
         cp ${init}/s6-linux-init.cpio $out/boot/s6-linux-init.cpio
         cp ${init}/COPYING.sixos $out/COPYING.sixos
+        mkdir -p $out/etc/sixos/services
+        cp -a ${../reterminal-e1002/services} $out/etc/sixos/services/reterminal
         echo '${
           builtins.toJSON {
             target = "reterminal-e1002";

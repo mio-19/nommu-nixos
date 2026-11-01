@@ -28,6 +28,10 @@ in
       };
     };
 
+    hardware.reterminal = {
+      enable = lib.mkEnableOption "Alias for hardware.reterminal-e1002.enable";
+    };
+
     hardware.deviceTree = {
       enable = lib.mkEnableOption "Device Tree support";
 
@@ -134,7 +138,8 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = lib.mkIf (cfg.enable || (config.hardware.reterminal.enable or false)) {
+    hardware.reterminal-e1002.enable = lib.mkDefault true;
     hardware.deviceTree = {
       enable = lib.mkDefault true;
       name = lib.mkDefault cfg.deviceTree.name;
