@@ -1,7 +1,11 @@
 #!/usr/bin/dash
 # s6 service: button and indicator supervisor for Seeed reTerminal E1002
 # Hardware: Left (GPIO 3), Middle (GPIO 4), Right (GPIO 5), LED (GPIO 6), Buzzer (GPIO 45)
-# Dispatches actions to /run/epaper/cmd and provides acoustic/visual feedback.
+# Function parity with official Seeed firmware:
+#   - Short press Left (GPIO 3, green button): Refresh ePaper dashboard + audio chirp
+#   - Long press Left (GPIO 3, >= 5 seconds): Anti-ghosting full screen clear + double beep + LED pulse
+#   - Middle (GPIO 4): Toggle system telemetry / view
+#   - Right (GPIO 5): Cycle view / connectivity trigger
 set -eu
 
 echo "[buttons] Starting reTerminal E1002 button & indicator service..."
@@ -40,6 +44,12 @@ beep() {
     fi
 }
 
+double_beep() {
+    beep 80
+    usleep 80000 2>/dev/null || sleep 1
+    beep 120
+}
+
 send_cmd() {
     cmd="$1"
     if [ -e /run/epaper/cmd ]; then
@@ -49,7 +59,6 @@ send_cmd() {
 
 cleanup() {
     echo "[buttons] Stopping button service..."
-    # Turn off LED and buzzer
     [ -f /sys/class/gpio/gpio6/value ] && echo "1" > /sys/class/gpio/gpio6/value 2>/dev/null || true
     [ -f /sys/class/gpio/gpio45/value ] && echo "0" > /sys/class/gpio/gpio45/value 2>/dev/null || true
     exit 0
@@ -57,27 +66,51 @@ cleanup() {
 
 trap cleanup INT TERM HUP
 
-echo "[buttons] Monitoring GPIO3 (Left), GPIO4 (Mid), GPIO5 (Right)..."
+echo "[buttons] Monitoring GPIO3 (Green), GPIO4 (Mid), GPIO5 (Right)..."
 
 # Initial ready chirp
 beep 30
+
+press_count_left=0
 
 while true; do
     b_left=$(cat /sys/class/gpio/gpio3/value 2>/dev/null || echo "1")
     b_mid=$(cat /sys/class/gpio/gpio4/value 2>/dev/null || echo "1")
     b_right=$(cat /sys/class/gpio/gpio5/value 2>/dev/null || echo "1")
 
+    # Left (Green) button with long-press anti-ghosting support
     if [ "$b_left" = "0" ]; then
-        echo "[buttons] Left pressed -> Refresh display"
-        beep 40
-        send_cmd "refresh"
-        sleep 1
-    elif [ "$b_mid" = "0" ]; then
+        press_count_left=$(( press_count_left + 1 ))
+        # If held for ~5 seconds (50 iterations @ 100ms)
+        if [ "$press_count_left" -eq 50 ]; then
+            echo "[buttons] Long press (5s) detected -> Clear anti-ghosting cycle"
+            double_beep
+            # Pulse LED to indicate clear triggered
+            [ -f /sys/class/gpio/gpio6/value ] && echo "1" > /sys/class/gpio/gpio6/value 2>/dev/null || true
+            send_cmd "clear"
+            usleep 200000 2>/dev/null || sleep 1
+            [ -f /sys/class/gpio/gpio6/value ] && echo "0" > /sys/class/gpio/gpio6/value 2>/dev/null || true
+        fi
+    else
+        # Button released
+        if [ "$press_count_left" -ge 1 ] && [ "$press_count_left" -lt 50 ]; then
+            echo "[buttons] Short press Left -> Refresh display"
+            beep 40
+            send_cmd "refresh"
+        fi
+        press_count_left=0
+    fi
+
+    # Middle button
+    if [ "$b_mid" = "0" ]; then
         echo "[buttons] Middle pressed -> Toggle system dashboard"
         beep 40
         send_cmd "status"
         sleep 1
-    elif [ "$b_right" = "0" ]; then
+    fi
+
+    # Right button
+    if [ "$b_right" = "0" ]; then
         echo "[buttons] Right pressed -> Next screen view"
         beep 40
         send_cmd "next"

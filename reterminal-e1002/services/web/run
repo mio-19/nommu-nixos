@@ -1,0 +1,131 @@
+#!/usr/bin/dash
+# s6 service: web telemetry and control dashboard for Seeed reTerminal E1002
+# Function parity with official Seeed firmware (SenseCraft HMI / Seeedash / TRMNL):
+#   - Embedded HTTP server on port 8080
+#   - Live telemetry dashboard (SHT40 temp/humidity, battery %, RTC clock, system status)
+#   - REST API endpoints for remote ePaper refresh, anti-ghosting clear, and buzzer
+set -eu
+
+PORT="${RETERMINAL_WEB_PORT:-8080}"
+WWW_DIR="/run/reterminal/www"
+CGI_DIR="$WWW_DIR/cgi-bin"
+
+echo "[web] Starting reTerminal E1002 web dashboard service on port $PORT..."
+mkdir -p "$CGI_DIR"
+
+# Generate main dashboard HTML
+cat <<'HTML' > "$WWW_DIR/index.html"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Seeed reTerminal E1002</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 24px; }
+    .card { background: #1e293b; border-radius: 12px; padding: 24px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+    h1 { margin-top: 0; font-size: 1.5rem; color: #38bdf8; display: flex; align-items: center; gap: 8px; }
+    .badge { font-size: 0.75rem; background: #0284c7; padding: 4px 8px; border-radius: 9999px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+    .metric { background: #334155; padding: 16px; border-radius: 8px; }
+    .metric-title { font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; }
+    .metric-value { font-size: 1.4rem; font-weight: bold; margin-top: 4px; color: #f1f5f9; }
+    .actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+    button { background: #2563eb; color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; }
+    button:hover { background: #1d4ed8; }
+    button.warning { background: #d97706; }
+    button.warning:hover { background: #b45309; }
+    footer { font-size: 0.75rem; color: #64748b; margin-top: 24px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Seeed reTerminal E1002 <span class="badge">Linux NOMMU / sixos</span></h1>
+    <div class="grid">
+      <div class="metric"><div class="metric-title">Temperature</div><div class="metric-value" id="val-temp">--</div></div>
+      <div class="metric"><div class="metric-title">Humidity</div><div class="metric-value" id="val-hum">--</div></div>
+      <div class="metric"><div class="metric-title">Battery</div><div class="metric-value" id="val-batt">--</div></div>
+      <div class="metric"><div class="metric-title">Free Memory</div><div class="metric-value" id="val-mem">--</div></div>
+    </div>
+    <div class="actions">
+      <button onclick="api('/cgi-bin/refresh')">Refresh ePaper</button>
+      <button class="warning" onclick="api('/cgi-bin/clear')">Clear Ghosting (5s)</button>
+      <button onclick="api('/cgi-bin/beep')">Beep Buzzer</button>
+    </div>
+    <footer>Display: 7.3" 800x480 Spectra 6 | Architecture: Xtensa ESP32-S3 | Init: sixos-s6</footer>
+  </div>
+  <script>
+    function update() {
+      fetch('/cgi-bin/api').then(r => r.json()).then(d => {
+        document.getElementById('val-temp').innerText = d.temperature || 'N/A';
+        document.getElementById('val-hum').innerText = d.humidity || 'N/A';
+        document.getElementById('val-batt').innerText = (d.battery_percent ? d.battery_percent + '%' : '') + ' (' + (d.battery_mv || '') + ')';
+        document.getElementById('val-mem').innerText = (d.mem_free_kb ? d.mem_free_kb + ' kB' : 'N/A');
+      }).catch(e => console.error(e));
+    }
+    function api(path) { fetch(path, { method: 'POST' }).then(() => update()); }
+    update();
+    setInterval(update, 5000);
+  </script>
+</body>
+</html>
+HTML
+
+# Generate CGI endpoints
+cat <<'SH' > "$CGI_DIR/api"
+#!/usr/bin/dash
+printf "Content-Type: application/json\r\n\r\n"
+if [ -f /run/sensors/metrics.json ]; then
+  cat /run/sensors/metrics.json
+else
+  printf '{"status": "sensors initializing"}\n'
+fi
+SH
+chmod 755 "$CGI_DIR/api"
+
+cat <<'SH' > "$CGI_DIR/refresh"
+#!/usr/bin/dash
+printf "Content-Type: application/json\r\n\r\n"
+if [ -e /run/epaper/cmd ]; then
+  printf "refresh\n" > /run/epaper/cmd
+fi
+printf '{"status": "refresh triggered"}\n'
+SH
+chmod 755 "$CGI_DIR/refresh"
+
+cat <<'SH' > "$CGI_DIR/clear"
+#!/usr/bin/dash
+printf "Content-Type: application/json\r\n\r\n"
+if [ -e /run/epaper/cmd ]; then
+  printf "clear\n" > /run/epaper/cmd
+fi
+printf '{"status": "anti-ghosting clear cycle triggered"}\n'
+SH
+chmod 755 "$CGI_DIR/clear"
+
+cat <<'SH' > "$CGI_DIR/beep"
+#!/usr/bin/dash
+printf "Content-Type: application/json\r\n\r\n"
+if [ -f /sys/class/gpio/gpio45/value ]; then
+  echo 1 > /sys/class/gpio/gpio45/value 2>/dev/null || true
+  usleep 50000 2>/dev/null || sleep 1
+  echo 0 > /sys/class/gpio/gpio45/value 2>/dev/null || true
+fi
+printf '{"status": "buzzer beeped"}\n'
+SH
+chmod 755 "$CGI_DIR/beep"
+
+cleanup() {
+    echo "[web] Stopping web dashboard..."
+    exit 0
+}
+
+trap cleanup INT TERM HUP
+
+# Launch BusyBox httpd in foreground under s6 supervision
+if command -v httpd >/dev/null 2>&1; then
+    exec httpd -f -p "$PORT" -h "$WWW_DIR"
+else
+    echo "[web] Warning: httpd not found in PATH, idling..."
+    exec sleep 3600
+fi

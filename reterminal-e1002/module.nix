@@ -109,6 +109,28 @@ in
           description = "Enable SHT40, PCF8563 RTC, and battery ADC telemetry polling service.";
         };
       };
+
+      web = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable embedded HTTP telemetry and remote control dashboard (SenseCraft/Seeedash parity).";
+        };
+
+        port = lib.mkOption {
+          type = lib.types.port;
+          default = 8080;
+          description = "HTTP port for the telemetry and control web service.";
+        };
+      };
+
+      sdcard = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable automatic MicroSD storage card detection and mounting.";
+        };
+      };
     };
   };
 

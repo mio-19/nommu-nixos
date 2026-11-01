@@ -1,0 +1,51 @@
+#!/usr/bin/dash
+# s6 service: MicroSD card auto-mounter for Seeed reTerminal E1002
+# Hardware: MicroSD slot on SPI3 (MOSI=GPIO14, MISO=GPIO15, SCK=GPIO16, CS=GPIO46/expansion)
+# Function parity with official Seeed firmware:
+#   - Automatic detection of inserted MicroSD cards (/dev/mmcblk0 or /dev/mmcblk0p1)
+#   - Mounts filesystem to /media/sdcard
+#   - Clean unmount on card removal or shutdown
+set -eu
+
+MOUNT_POINT="/media/sdcard"
+echo "[sdcard] Starting MicroSD supervisor service for reTerminal E1002..."
+mkdir -p "$MOUNT_POINT"
+
+cleanup() {
+    echo "[sdcard] Stopping MicroSD supervisor, unmounting $MOUNT_POINT..."
+    umount "$MOUNT_POINT" 2>/dev/null || true
+    exit 0
+}
+
+trap cleanup INT TERM HUP
+
+is_mounted() {
+    awk -v mp="$MOUNT_POINT" '$2 == mp { found=1 } END { exit !found }' /proc/mounts 2>/dev/null
+}
+
+while true; do
+    device=""
+    if [ -b /dev/mmcblk0p1 ]; then
+        device="/dev/mmcblk0p1"
+    elif [ -b /dev/mmcblk0 ]; then
+        device="/dev/mmcblk0"
+    fi
+
+    if [ -n "$device" ]; then
+        if ! is_mounted; then
+            echo "[sdcard] MicroSD detected at $device, mounting to $MOUNT_POINT..."
+            if mount -t auto -o rw,noatime "$device" "$MOUNT_POINT" 2>/dev/null; then
+                echo "[sdcard] Successfully mounted $device to $MOUNT_POINT."
+            else
+                echo "[sdcard] Failed to mount $device."
+            fi
+        fi
+    else
+        if is_mounted; then
+            echo "[sdcard] MicroSD removed, unmounting $MOUNT_POINT..."
+            umount -l "$MOUNT_POINT" 2>/dev/null || true
+        fi
+    fi
+
+    sleep 5
+done
